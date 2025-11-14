@@ -1,0 +1,67 @@
+nohup: ignoring input
+Index on users already exists with different options: Index already exists with a different name: username_1, full error: {'ok': 0.0, 'errmsg': 'Index already exists with a different name: username_1', 'code': 85, 'codeName': 'IndexOptionsConflict', '$clusterTime': {'clusterTime': Timestamp(1755446082, 3), 'signature': {'hash': b'/s\xe56\xa9\xf3qA\xf8\xb9*%i\xa3\xc6\xcf\x97u\x959', 'keyId': 7474557810299109377}}, 'operationTime': Timestamp(1755446082, 3)}
+Index on users already exists with different options: Index already exists with a different name: email_1, full error: {'ok': 0.0, 'errmsg': 'Index already exists with a different name: email_1', 'code': 85, 'codeName': 'IndexOptionsConflict', '$clusterTime': {'clusterTime': Timestamp(1755446082, 3), 'signature': {'hash': b'/s\xe56\xa9\xf3qA\xf8\xb9*%i\xa3\xc6\xcf\x97u\x959', 'keyId': 7474557810299109377}}, 'operationTime': Timestamp(1755446082, 3)}
+Index on roles already exists with different options: Index already exists with a different name: name_1, full error: {'ok': 0.0, 'errmsg': 'Index already exists with a different name: name_1', 'code': 85, 'codeName': 'IndexOptionsConflict', '$clusterTime': {'clusterTime': Timestamp(1755446082, 4), 'signature': {'hash': b'/s\xe56\xa9\xf3qA\xf8\xb9*%i\xa3\xc6\xcf\x97u\x959', 'keyId': 7474557810299109377}}, 'operationTime': Timestamp(1755446082, 4)}
+Index on quotations already exists with different options: Index already exists with a different name: quotation_number_1, full error: {'ok': 0.0, 'errmsg': 'Index already exists with a different name: quotation_number_1', 'code': 85, 'codeName': 'IndexOptionsConflict', '$clusterTime': {'clusterTime': Timestamp(1755446083, 1), 'signature': {'hash': b'k\x03\x8c\xf6\xfb\xbc\xfa\xae\xd9\xf9\xc6\x13@\xe2"\x9c,%;\xa9', 'keyId': 7474557810299109377}}, 'operationTime': Timestamp(1755446083, 1)}
+INFO:app.database:Connecting to MongoDB at mongodb+srv://test:test123@cluster0.g3zdcff.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+INFO:app.database:MongoDB connection successful
+/home/ubuntu/.local/lib/python3.10/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning) 
+INFO:root:Roles router initialized and registered
+INFO:root:HR Staff router initialized and registered
+INFO:root:HR Staff route registered: /api/hr/dashboard [GET]
+INFO:root:HR Staff route registered: /api/hr/employees [GET]
+INFO:root:HR Staff route registered: /api/hr/attendance [GET]
+INFO:root:HR Staff route registered: /api/hr/attendance/checkin [POST]
+INFO:root:HR Staff route registered: /api/hr/attendance/manual-checkin [POST]
+INFO:root:HR Staff route registered: /api/hr/attendance/checkout [POST]
+INFO:root:HR Staff route registered: /api/hr/leave-requests [GET]
+INFO:root:HR Staff route registered: /api/hr/leave-requests [POST]
+INFO:root:HR Staff route registered: /api/hr/leave-requests/{request_id}/approve [PUT]
+INFO:root:HR Staff route registered: /api/hr/leave-requests/{request_id}/reject [PUT]
+INFO:root:HR Staff route registered: /api/hr/api/employees/statistics [GET]
+INFO:root:HR Staff route registered: /api/hr/employees/statistics [GET]
+INFO:root:HR Staff route registered: /api/hr/api/employees/attendance/all [GET]
+INFO:root:HR Staff route registered: /api/hr/employees/attendance/all [GET]
+INFO:root:HR Staff route registered: /api/hr/api/employees/attendance/user [GET]
+INFO:root:HR Staff route registered: /api/hr/employees/attendance/user [GET]
+INFO:root:HR Staff route registered: /api/hr/api/employees/attendance/all [GET]
+INFO:root:HR Staff route registered: /api/hr/employees/attendance/all [GET]
+INFO:root:HR Staff route registered: /api/hr/api/employees/attendance/edit/{attendance_id} [PUT]
+INFO:root:HR Staff route registered: /api/hr/attendance/edit/{attendance_id} [PUT]
+INFO:root:HR Staff route registered: /api/hr/api/employees/attendance/create [POST]
+INFO:root:HR Staff route registered: /api/hr/attendance/create [POST]
+INFO:     Started server process [618892]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8004 (Press CTRL+C to quit)
+INFO:app.routes.followup:Followup creation requested by user: amit24
+INFO:app.routes.leads:Created activity for lead FINAL_TEST: followup_created
+[2025-08-17 21:24:44] RoleRepository initialized successfully
+[DEBUG] AuthService using SECRET_KEY: your_...
+[2025-08-17 21:24:44] RoleRepository initialized successfully
+[DEBUG] Token: eyJhbGciOiJIUzI... (truncated)
+[DEBUG] SECRET_KEY: your_... (truncated)
+[DEBUG] User ID from token: amit24
+Creating followup activity for lead_id: FINAL_TEST, creator: amit24
+Successfully created followup activity
+INFO:     127.0.0.1:50592 - "POST /api/followups/ HTTP/1.1" 201 Created
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [618892]
