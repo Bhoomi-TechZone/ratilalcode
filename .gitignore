@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# FastAPI
+*.sqlite3
+
+# Environment
+.env
+*.env
+
+# Node / React
+node_modules/
+dist/
+.vite/
+
+# Logs
+*.log
+
+# OS/IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Uploads
+uploaded_pdfs/
+uploads/

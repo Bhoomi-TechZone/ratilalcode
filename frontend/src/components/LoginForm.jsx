@@ -39,14 +39,16 @@ export default function LoginForm({ onLogin, onShowRegister }) {
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);
       localStorage.setItem("token_type", data.token_type);
-      //localStorage.setItem("user", JSON.stringify({ id: user._id }));
       localStorage.setItem("user", JSON.stringify(data.user));
+
+      window.dispatchEvent(new Event('login'));
+      // ===========================
 
       // Show success modal, don't call onLogin yet!
       setSuccessModal(true);
       setWaitingForRedirect(true);
 
-      // Wait 1.5 seconds, then call onLogin (which will redirect)
+      // Wait 1 sec, then call onLogin (which will redirect)
       setTimeout(() => {
         setSuccessModal(false);
         setWaitingForRedirect(false);
@@ -57,6 +59,53 @@ export default function LoginForm({ onLogin, onShowRegister }) {
       setError(err.message);
     }
   };
+
+
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+  //   setError(null);
+  //   try {
+  //     const formData = new URLSearchParams();
+  //     formData.append("username", form.username);
+  //     formData.append("password", form.password);
+
+  //     const res = await fetch("http://localhost:3005/api/auth/login", {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/x-www-form-urlencoded",
+  //       },
+  //       body: formData.toString(),
+  //     });
+
+  //     if (!res.ok) {
+  //       const errorData = await res.json();
+  //       throw new Error(errorData.message || "Login failed");
+  //     }
+
+  //     const data = await res.json();
+
+  //     // Save tokens
+  //     localStorage.setItem("access_token", data.access_token);
+  //     localStorage.setItem("refresh_token", data.refresh_token);
+  //     localStorage.setItem("token_type", data.token_type);
+  //     //localStorage.setItem("user", JSON.stringify({ id: user._id }));
+  //     localStorage.setItem("user", JSON.stringify(data.user));
+
+  //     // Show success modal, don't call onLogin yet!
+  //     setSuccessModal(true);
+  //     setWaitingForRedirect(true);
+
+  //     // Wait 1.5 seconds, then call onLogin (which will redirect)
+  //     setTimeout(() => {
+  //       setSuccessModal(false);
+  //       setWaitingForRedirect(false);
+  //       if (onLogin) onLogin(data.user);
+  //     }, 1000);
+
+  //   } catch (err) {
+  //     setError(err.message);
+  //   }
+  // };
 
   // Just in case user closes modal early, also redirect
   const handleSuccessClose = () => {

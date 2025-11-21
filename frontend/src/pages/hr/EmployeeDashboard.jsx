@@ -1,33 +1,96 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { FaUserClock, FaCalendarCheck, FaBusinessTime, FaFileAlt } from 'react-icons/fa';
 
-const EmployeeDashboard = ({ userDetails, userAttendance, userLeaves }) => {
-  // Calculate statistics
-  const todayDate = new Date().toISOString().split('T')[0];
-  const isPresentToday = userAttendance?.some(
-    record => record.date === todayDate && record.status === 'present'
-  );
+const API_BASE = "http://localhost:3005/api"; // update if needed
 
+// FIX: Add computeAttendanceRate function here so it is available in your component
+function computeAttendanceRate(records) {
+  if (!records || !records.length) return "0";
+  const recent = records.slice(-30);
+  const presentCount = recent.filter(r => r.status === "present").length;
+  return Math.round((presentCount / recent.length) * 100) || 0;
+}
+
+const EmployeeDashboard = () => {
+  const [userDetails, setUserDetails] = useState(null);
+  const [userAttendance, setUserAttendance] = useState([]);
+  const [userLeaves, setUserLeaves] = useState([]);
+  const [leaveBalance, setLeaveBalance] = useState({ casual: 0, sick: 0, annual: 0, other: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const userObj = JSON.parse(localStorage.getItem("user"));
+        const userId = userObj?.id || userObj?.user_id;
+        const token = localStorage.getItem("access_token");
+
+        // 1. Fetch user details
+        let detailsRes = await fetch(`${API_BASE}/users/${userId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        let detailsData = detailsRes.ok ? await detailsRes.json() : {};
+
+        // 2. Fetch attendance for user
+        let attRes = await fetch(`${API_BASE}/hr/attendance?user_id=${userId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        let attData = attRes.ok ? (await attRes.json()).data || [] : [];
+
+        // 3. Fetch leave requests for user
+        let leaveRes = await fetch(`${API_BASE}/hr/leaves?user_id=${userId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        let leaveData = leaveRes.ok ? (await leaveRes.json()).data || [] : [];
+
+        // 4. Optional: Fetch user's leave balance
+        let balance = { casual: 12, sick: 10, annual: 15, other: 5 }; // fallback defaults
+        try {
+          let balRes = await fetch(`${API_BASE}/hr/leave-balance?user_id=${userId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (balRes.ok) balance = await balRes.json();
+        } catch {}
+
+        // Calculate used leaves and subtract
+        const approvedLeaves = leaveData.filter(leave => leave.status === 'approved');
+        approvedLeaves.forEach(leave => {
+          const leaveType = leave.leave_type?.toLowerCase() || 'other';
+          const daysCount = leave.days_count || 1;
+          if (balance[leaveType] !== undefined) {
+            balance[leaveType] -= daysCount;
+          }
+        });
+
+        setUserDetails(detailsData);
+        setUserAttendance(attData);
+        setUserLeaves(leaveData);
+        setLeaveBalance(balance);
+      } catch (err) {
+        setUserDetails(null);
+        setUserAttendance([]);
+        setUserLeaves([]);
+        setLeaveBalance({ casual: 0, sick: 0, annual: 0, other: 0 });
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboardData();
+  }, []);
+
+  // Calculate today's stats
+  const todayDate = new Date().toISOString().split('T')[0];
+  const isPresentToday = userAttendance?.some(record => record.date === todayDate && record.status === 'present');
   const approvedLeaves = userLeaves?.filter(leave => leave.status === 'approved') || [];
   const pendingLeaves = userLeaves?.filter(leave => leave.status === 'pending') || [];
-  
-  // Calculate leave balance
-  const leaveBalance = {
-    casual: 12, // Default values, should be pulled from server or configuration
-    sick: 10,
-    annual: 15,
-    other: 5
-  };
-  
-  // Subtract used leaves
-  approvedLeaves.forEach(leave => {
-    const leaveType = leave.leave_type?.toLowerCase() || 'other';
-    const daysCount = leave.days_count || 1;
-    
-    if (leaveBalance[leaveType] !== undefined) {
-      leaveBalance[leaveType] -= daysCount;
-    }
-  });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96 text-lg font-semibold text-gray-500">
+        Loading dashboard...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -71,7 +134,7 @@ const EmployeeDashboard = ({ userDetails, userAttendance, userLeaves }) => {
         
         <StatCard 
           title="Attendance Rate" 
-          value={`${Math.floor(Math.random() * 21) + 80}%`} 
+          value={`${computeAttendanceRate(userAttendance)}%`} 
           icon={<FaCalendarCheck />} 
           color="blue"
           detail="Last 30 days"
@@ -200,8 +263,8 @@ const EmployeeDashboard = ({ userDetails, userAttendance, userLeaves }) => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        leave.status === 'approved' 
-                          ? 'bg-green-100 text-green-800' 
+                        leave.status === 'approved'
+                          ? 'bg-green-100 text-green-800'
                           : leave.status === 'rejected'
                             ? 'bg-red-100 text-red-800'
                             : 'bg-yellow-100 text-yellow-800'
@@ -229,6 +292,7 @@ const EmployeeDashboard = ({ userDetails, userAttendance, userLeaves }) => {
   );
 };
 
+
 // Stat Card Component
 const StatCard = ({ title, value, icon, color, detail }) => {
   const colorClasses = {
@@ -255,6 +319,7 @@ const StatCard = ({ title, value, icon, color, detail }) => {
     </div>
   );
 };
+
 
 // Leave Balance Card Component
 const LeaveBalanceCard = ({ type, total, used, color }) => {
@@ -301,6 +366,7 @@ const LeaveBalanceCard = ({ type, total, used, color }) => {
     </div>
   );
 };
+
 
 // Helper Functions
 const formatDate = (dateString) => {

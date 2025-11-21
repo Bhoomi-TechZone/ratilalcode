@@ -249,24 +249,27 @@ const HRStaffModuleComplete = () => {
   };
 
   // Check if user has specific permission
-  const hasPermission = (permission) => {
+  const hasPermission = (permission, currentUser) => {
     if (!currentUser || !currentUser.roles) return false;
-    const roles = Array.isArray(currentUser.roles) ? currentUser.roles : [currentUser.roles];
+
+    const roles = Array.isArray(currentUser.roles)
+      ? currentUser.roles
+      : [currentUser.roles];
+
     return roles.some(role => {
-      if (typeof role === 'string') {
-        return role.toLowerCase().includes('admin') || 
-               role.toLowerCase().includes('hr') || 
-               role.toLowerCase().includes('hr_manager') ||
-               role.toLowerCase().includes('human_resources');
-      }
-      return (role.name && (
-        role.name.toLowerCase().includes('admin') || 
-        role.name.toLowerCase().includes('hr') ||
-        role.name.toLowerCase().includes('hr_manager') ||
-        role.name.toLowerCase().includes('human_resources')
-      ));
+      const roleName = typeof role === 'string' ? role : role?.name;
+      if (!roleName) return false;
+
+      const normalized = roleName.toLowerCase();
+      return (
+        normalized.includes('admin') ||
+        normalized.includes('hr') ||
+        normalized.includes('hr_manager') ||
+        normalized.includes('human_resources')
+      );
     });
   };
+
 
   // Fetch dashboard statistics
   const fetchDashboardStats = async () => {

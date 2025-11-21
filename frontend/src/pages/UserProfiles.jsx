@@ -115,17 +115,31 @@ const UserProfiles = () => {
   };
 
   function renderRoles(user) {
-    if (Array.isArray(user.roles) && user.roles.length > 0) {
-      return user.roles.map(role =>
-        typeof role === "string"
-          ? (roles.find(r => r.id === role)?.name || role)
-          : (role.name || role.id || JSON.stringify(role))
-      ).join(", ");
+    let idList = [];
+    if (Array.isArray(user.role_ids) && user.role_ids.length > 0) {
+      idList = user.role_ids;
+    } else if (Array.isArray(user.roles) && user.roles.length > 0) {
+      // If roles are objects, map by name
+      if (typeof user.roles[0] === "object" && user.roles[0].name) {
+        return user.roles.map(r => r.name).join(", ");
+      }
+      idList = user.roles;
     } else if (typeof user.roles === "string") {
-      return user.roles;
+      idList = [user.roles];
     }
-    return "";
+
+    // Map idList to names, fallback to id if not found
+    if (roles && roles.length > 0) {
+      return idList.map(rid => {
+        const found = roles.find(role => (
+          role.id === rid || role.name === rid // match both id or name on accident
+        ));
+        return found ? found.name : rid;
+      }).join(", ");
+    }
+    return idList.join(", ");
   }
+
 
   const onNewUserChange = e => {
     const { name, value, type, checked } = e.target;
@@ -398,25 +412,6 @@ const UserProfiles = () => {
     }
     setActionLoading("");
   };
-
-  // const isAdmin = () => {
-  //   try {
-  //     const userStr = localStorage.getItem("user");
-  //     if (userStr) {
-  //       const userObj = JSON.parse(userStr);
-  //       let roles = [];
-  //       if (userObj.roles) {
-  //         if (Array.isArray(userObj.roles)) {
-  //           roles = userObj.roles.map(r => typeof r === "string" ? r.toLowerCase() : (r.name || r.id || "").toLowerCase());
-  //         } else if (typeof userObj.roles === "string") {
-  //           roles = [userObj.roles.toLowerCase()];
-  //         }
-  //       }
-  //       return roles.includes("admin");
-  //     }
-  //   } catch { }
-  //   return false;
-  // };
 
   // Responsive grid columns for forms
   const inputCol = "col-span-12 sm:col-span-6";

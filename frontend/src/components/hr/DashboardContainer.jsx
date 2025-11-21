@@ -3,6 +3,7 @@ import Dashboard from './Dashboard';
 import EmployeeDashboard from './EmployeeDashboard';
 import AttendanceManagement from './AttendanceManagement';
 import LeaveManagement from './LeaveManagement';
+import EmployeeManagement from './EmployeeManagement';
 
 const API_BASE_URL = 'http://localhost:3005';
 
@@ -483,26 +484,19 @@ const DashboardContainer = () => {
             handleSubmitLeaveRequest={handleSubmitLeaveRequest}
             handleLeaveApproval={handleLeaveApproval}
             isAdminOrHR={isAdmin || isHR}
+            hasPermission={hasPermission}
           />
         )}
         
         {/* Employees Tab (Admin/HR Only) */}
         {activeTab === 'employees' && (isAdmin || isHR) && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">Employee Management</h2>
-                <p className="text-gray-600 mt-1">Manage all employees in the organization</p>
-              </div>
-            </div>
-            
-            {/* Employee Management UI goes here */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="p-4">
-                <p className="text-gray-500">Employee management functionality will be integrated here.</p>
-              </div>
-            </div>
-          </div>
+          <EmployeeManagement
+            employees={employees}
+            currentUser={currentUser}
+            hasPermission={hasPermission}
+            isAdminOrHR={isAdmin || isHR}
+            // Add more props here if your EmployeeManagement component needs them
+          />
         )}
       </div>
     </div>

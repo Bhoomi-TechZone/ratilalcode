@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Dict, Optional, Any
 from bson import ObjectId
 from app.database.repositories.user_repository import UserRepository
-from app.dependencies import get_current_user  # Use the correct auth function
+from app.dependencies import get_current_user 
 
 def serialize_user_data(user_data):
     """Convert any ObjectId fields to strings for JSON serialization"""
@@ -21,13 +21,12 @@ def serialize_user_data(user_data):
     
     return user_data
 
-# Create router
 users_router = APIRouter(prefix="/api/users", tags=["users"])
 
 @users_router.get("/", response_model=List[Dict])
 async def get_all_users(except_role: Optional[str] = None):
     """
-    Get all users with basic information for lead assignment
+    Get all users with basic information
     
     Args:
         except_role: Optional role name to exclude from results (e.g., 'customer')
@@ -85,7 +84,7 @@ async def get_all_users(except_role: Optional[str] = None):
                     reports_to_name = manager.get('full_name', manager.get('username', 'Unknown'))
             
             enhanced_user = {
-                "id": user.get('user_id'),  # Use user_id as the main ID
+                "id": user.get('user_id'),
                 "user_id": user.get('user_id'),
                 "name": user.get('full_name', user.get('username', 'Unknown')),
                 "full_name": user.get('full_name'),
@@ -93,10 +92,10 @@ async def get_all_users(except_role: Optional[str] = None):
                 "email": user.get('email'),
                 "role_name": role_name,
                 "role_ids": user.get('role_ids', []),
-                "roles": user.get('roles', []),
+                "roles": [role_map.get(rid, rid) for rid in user.get('role_ids', [])],
                 "reports_to": user.get('reports_to'),
                 "reports_to_name": reports_to_name,
-                "is_senior": is_senior,  # True if reports_to is None/empty
+                "is_senior": is_senior,
                 "department": user.get('department'),
                 "phone": user.get('phone'),
                 "is_active": user.get('is_active', True),

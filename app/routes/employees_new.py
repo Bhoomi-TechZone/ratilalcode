@@ -51,6 +51,7 @@ def has_hr_permission(user_roles: List[str]) -> bool:
     hr_roles = ["hr", "admin", "hr_manager", "human_resources"]
     return any(role.lower() in hr_roles for role in user_roles)
 
+
 # Helper function to check if user can manage leave requests (admin or HR roles)
 def can_manage_leave_requests(user_roles: List[str]) -> bool:
     """Check if user has permissions to approve/reject leave requests (admin or HR roles)"""
@@ -1524,54 +1525,61 @@ async def checkin_attendance(payload: Dict = Body(...)):
 @employees_router.post("/{employee_id}/attendance/checkin", status_code=201)
 async def employee_checkin(
     employee_id: str,
-    payload: Dict = Body(...)
+    payload: dict = Body(...)
 ):
-    """Check in attendance for specific employee with geolocation support"""
+    """
+    Check in attendance for specific employee with full lookup compatibility.
+    """
     try:
         db = get_database()
-        
-        # Verify user exists
-        user = db.users.find_one({"user_id": employee_id})
-        if not user:
+
+        # Always robustly resolve employee record by _id, user_id, or employee_id
+        or_conditions = []
+        if ObjectId.is_valid(employee_id):
+            or_conditions.append({"_id": ObjectId(employee_id)})
+        or_conditions += [
+            {"user_id": employee_id},
+            {"employee_id": employee_id}
+        ]
+        if payload.get("email"):
+            or_conditions.append({"email": payload["email"]})
+
+        employee = db.employees.find_one({"$or": or_conditions})
+
+        if not employee:
             raise HTTPException(status_code=404, detail="Employee not found")
-        
-        # Get data from payload
+
         today = payload.get("date", datetime.now().strftime("%Y-%m-%d"))
         current_time = datetime.now()
-        
-        # Location data from your attendance system
+
         geo_lat = payload.get("geo_lat")
-        geo_long = payload.get("geo_long") 
+        geo_long = payload.get("geo_long")
         location_name = payload.get("location_name", payload.get("location", "Office"))
         attendance_status = payload.get("status", "present")
         time_provided = payload.get("time")
         notes = payload.get("notes", "")
-        
-        # Parse time if provided
+
         if time_provided:
             try:
                 if isinstance(time_provided, str):
                     current_time = datetime.fromisoformat(time_provided.replace('Z', '+00:00'))
                 else:
                     current_time = time_provided
-            except:
+            except Exception:
                 current_time = datetime.now()
-        
-        # Check if already checked in today
+
         existing_record = db.attendance.find_one({
-            "user_id": employee_id,
+            "user_id": employee["user_id"],
             "date": today
         })
-        
-        # Allow update if status was "absent" and now marking "present" (rescue scenario)
+
         if existing_record and existing_record.get("checkin_time") and existing_record.get("status") == "present":
             raise HTTPException(status_code=400, detail="Already checked in today")
-        
-        # Create or update checkin record
+
         attendance_record = {
-            "user_id": employee_id,
-            "employee_id": employee_id,
-            "employee_name": user.get("full_name", user.get("username")),
+            "user_id": employee["user_id"],
+            "employee_id": employee.get("employee_id", ""),
+            "employee_name": employee.get("name", ""),
             "date": today,
             "checkin_time": current_time,
             "checkout_time": None,
@@ -1586,34 +1594,33 @@ async def employee_checkin(
             "created_at": current_time,
             "updated_at": current_time
         }
-        
+
         if existing_record:
-            # Update existing record (rescue scenario)
             db.attendance.update_one(
-                {"user_id": employee_id, "date": today},
+                {"user_id": employee["user_id"], "date": today},
                 {"$set": attendance_record}
             )
             action_message = "Attendance updated successfully"
         else:
-            # Create new record
             result = db.attendance.insert_one(attendance_record)
             attendance_record["_id"] = result.inserted_id
             action_message = "Checked in successfully"
-        
+
         return {
             "success": True,
             "message": action_message,
             "timestamp": current_time,
             "data": {
-                "employee_id": employee_id,
+                "employee_id": employee.get("employee_id", ""),
+                "user_id": employee["user_id"],
                 "date": today,
                 "status": attendance_status,
                 "location": location_name,
                 "geo_lat": geo_lat,
-                "geo_long": geo_long
+                "geo_long": geo_long,
             }
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1622,107 +1629,108 @@ async def employee_checkin(
 @employees_router.post("/{employee_id}/attendance/checkout", status_code=201)
 async def employee_checkout(
     employee_id: str,
-    payload: Dict = Body(...)
+    payload: dict = Body(...)
 ):
-    """Check out attendance for specific employee with geolocation support"""
+    """
+    Check out attendance for specific employee with full lookup compatibility.
+    """
     try:
         db = get_database()
-        
-        # Verify user exists
-        user = db.users.find_one({"user_id": employee_id})
-        if not user:
+
+        or_conditions = []
+        if ObjectId.is_valid(employee_id):
+            or_conditions.append({"_id": ObjectId(employee_id)})
+        or_conditions += [
+            {"user_id": employee_id},
+            {"employee_id": employee_id}
+        ]
+        if payload.get("email"):
+            or_conditions.append({"email": payload["email"]})
+
+        employee = db.employees.find_one({"$or": or_conditions})
+
+        if not employee:
             raise HTTPException(status_code=404, detail="Employee not found")
-        
+
         today = payload.get("date", datetime.now().strftime("%Y-%m-%d"))
         current_time = datetime.now()
-        
-        # Location data from your attendance system
+
         geo_lat = payload.get("geo_lat")
         geo_long = payload.get("geo_long")
         location_name = payload.get("location_name", payload.get("location", "Office"))
         time_provided = payload.get("time")
         notes = payload.get("notes", "")
-        
-        # Parse time if provided
+
         if time_provided:
             try:
                 if isinstance(time_provided, str):
                     current_time = datetime.fromisoformat(time_provided.replace('Z', '+00:00'))
                 else:
                     current_time = time_provided
-            except:
+            except Exception:
                 current_time = datetime.now()
-        
-        # Check if has checkin record today
+
         existing_record = db.attendance.find_one({
-            "user_id": employee_id,
+            "user_id": employee["user_id"],
             "date": today
         })
-        
+
         if not existing_record or not existing_record.get("checkin_time"):
             raise HTTPException(status_code=400, detail="No checkin record found for today")
-        
+
         if existing_record.get("checkout_time"):
             raise HTTPException(status_code=400, detail="Already checked out today")
-        
-        # Calculate working hours
+
         checkin_time = existing_record["checkin_time"]
         if isinstance(checkin_time, str):
-            # Parse string datetime and make it timezone aware if needed
             checkin_time = datetime.fromisoformat(checkin_time.replace('Z', '+00:00'))
         elif isinstance(checkin_time, datetime) and checkin_time.tzinfo is None:
-            # If checkin_time is offset-naive, make current_time also offset-naive for consistency
             current_time = current_time.replace(tzinfo=None)
-        
+
         working_hours = (current_time - checkin_time).total_seconds() / 3600
-        
-        # Update checkout with geolocation data
+
         checkout_data = {
             "checkout_time": current_time,
             "working_hours": round(working_hours, 2),
             "notes": notes,
             "updated_at": current_time
         }
-        
-        # Add geolocation data if provided
+
         if geo_lat is not None:
             checkout_data["checkout_geo_lat"] = geo_lat
-            # Also update the main geo_lat for consistency
             checkout_data["geo_lat"] = geo_lat
         if geo_long is not None:
             checkout_data["checkout_geo_long"] = geo_long
-            # Also update the main geo_long for consistency
             checkout_data["geo_long"] = geo_long
         if location_name:
             checkout_data["checkout_location"] = location_name
-            # Also update the main location fields for consistency
             checkout_data["location"] = location_name
             checkout_data["location_name"] = location_name
-        
-        # Update the time field to checkout time for consistency
+
         checkout_data["time"] = current_time
-        
+
         db.attendance.update_one(
-            {"user_id": employee_id, "date": today},
+            {"user_id": employee["user_id"], "date": today},
             {"$set": checkout_data}
         )
-        
+
         return {
             "success": True,
             "message": "Checked out successfully",
             "timestamp": current_time,
             "working_hours": round(working_hours, 2),
             "data": {
-                "employee_id": employee_id,
+                "employee_id": employee.get("employee_id", ""),
+                "user_id": employee["user_id"],
                 "date": today,
                 "checkout_time": current_time,
                 "working_hours": round(working_hours, 2),
                 "checkout_location": location_name,
                 "checkout_geo_lat": geo_lat,
-                "checkout_geo_long": geo_long
+                "checkout_geo_long": geo_long,
             }
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:

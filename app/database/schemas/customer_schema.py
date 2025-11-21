@@ -1,38 +1,3 @@
-# from pydantic import BaseModel, Field, EmailStr
-# from typing import List, Optional
-# from datetime import datetime
-
-# class FeedbackModel(BaseModel):
-#     feedback_id: Optional[str] = None
-#     user_id: str
-#     content: str
-#     created_at: Optional[datetime] = None
-#     type: str = "feedback"
-
-
-# class CommunicationLogModel(BaseModel):
-#     log_id: Optional[str] = None
-#     channel: str  # e.g., call, email, whatsapp
-#     metadata: Optional[dict] = None
-#     content: Optional[str] = None
-#     timestamp: datetime = Field(default_factory=datetime.now)
-
-# class TransactionModel(BaseModel):
-#     transaction_id: Optional[str] = None
-#     customer_id: str
-#     amount: float
-#     details: Optional[str] = None
-#     timestamp: datetime = Field(default_factory=datetime.now)
-
-# class CustomerProfileModel(BaseModel):
-#     id: Optional[str] = None
-#     name: str
-#     email: EmailStr
-#     phone: str
-#     address: Optional[str]
-#     created_at: datetime = Field(default_factory=datetime.now)
-
-
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
 from datetime import datetime

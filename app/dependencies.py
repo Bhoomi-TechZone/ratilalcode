@@ -5,6 +5,7 @@ from typing import Dict, List, Any, Set
 from app.config import settings
 from datetime import datetime, timedelta
 from jwt import PyJWTError as JWTError
+from app.database import db
 from app.database.repositories.role_repository import RoleRepository
 from app.database.repositories.user_repository import UserRepository
 from app.utils.timezone_utils import get_ist_now, get_ist_timestamp
@@ -197,38 +198,42 @@ class PermissionChecker:
 
 # Common role-based dependencies
 async def admin_required(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    """Check if user has admin role"""
-    # Get roles from user object and token
+    """Check if user has admin role by resolving role IDs to role names."""
+
     roles = current_user.get("roles", [])
     token_roles = current_user.get("token_data", {}).get("roles", [])
     
-    # Debug roles
     print(f"[DEBUG] User roles from user object: {roles}")
     print(f"[DEBUG] User roles from token: {token_roles}")
-    
-    # FIX: Ensure roles is a list
+
+    # Normalize role IDs
     if isinstance(roles, str):
-        # If roles is a string, convert it to a list with one item
         roles = [roles]
     elif not isinstance(roles, list):
-        # If roles is neither a string nor a list, set it to an empty list
         roles = []
-    
-    # Ensure token_roles is a list (it already seems to be, but just to be safe)
     if not isinstance(token_roles, list):
         token_roles = [token_roles] if token_roles else []
-    
-    # Now both roles and token_roles are lists, so we can safely concatenate them
-    all_roles = set(roles + token_roles)
-    
-    # Check for admin role
-    if "admin" not in all_roles:
-        print(f"[ERROR] User {current_user.get('username')} doesn't have admin role. Available roles: {all_roles}")
+    all_role_ids = list(set(roles + token_roles))
+
+    if not all_role_ids:
+        print("[ERROR] No roles found for current user.")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to create roles. Admin rights required."
         )
-    
+
+    # Fetch all matching roles from the DB
+    role_docs = list(db.roles.find({"id": {"$in": all_role_ids}}))
+    print(f"[DEBUG] Matching role documents from DB: {[r.get('name') for r in role_docs]}")
+
+    # Check for any role with name 'admin'
+    if not any(role_doc.get("name") == "admin" for role_doc in role_docs):
+        print(f"[ERROR] User {current_user.get('username')} doesn't have admin role. Checked roles: {all_role_ids}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to create roles. Admin rights required."
+        )
+
     return current_user
 
 

@@ -217,87 +217,7 @@ class AuthService:
         """Temporary bypass of admin check - REMOVE IN PRODUCTION"""
         print(f"[WARNING] ADMIN CHECK BYPASSED for user {current_user.get('username')} - DEVELOPMENT ONLY!")
         return current_user
-    
-    # # Register user method - keep your full implementation
-    # def register_user(self, username, email, password, full_name, phone=None, department=None,role_ids=None):
-    #     """Register a new user"""
-    #     # Check if username already exists
-    #     if self.user_repo.get_user_by_username(username):
-    #         raise HTTPException(
-    #             status_code=status.HTTP_400_BAD_REQUEST,
-    #             detail="Username already registered"
-    #         )
-        
-    #     # Check if email already exists
-    #     if self.user_repo.get_user_by_email(email):
-    #         raise HTTPException(
-    #             status_code=status.HTTP_400_BAD_REQUEST,
-    #             detail="Email already registered"
-    #         )
-        
-    #     # Hash the password
-    #     hashed_password = self.get_password_hash(password)
-        
-    #     # Default role if none specified
-    #     roles_to_assign = roles if roles else ["user"]
-        
-    #     # Prepare user data
-    #     user_dict = {
-    #         "username": username,
-    #         "email": email,
-    #         "password": hashed_password,
-    #         "full_name": full_name,
-    #         "phone": phone,
-    #         "department": department,
-    #         "is_active": True,
-    #         "created_at": datetime.now(),
-    #         "updated_at": datetime.now(),
-    #         "role_ids": role_ids or [],
-    #     }
-        
-    #     # Get role IDs for assigned roles
-    #     role_ids = []
-        
-    #     for role_name in roles_to_assign:
-    #         role = self.role_repo.get_role_by_name(role_name)
-    #         if role:
-    #             role_ids.append(role["id"])
-        
-    #     # If no valid roles found, try to get the default "user" role
-    #     if not role_ids:
-    #         user_role = self.role_repo.get_role_by_name("user")
-    #         if user_role:
-    #             role_ids.append(user_role["id"])
-        
-    #     user_dict["role_ids"] = role_ids
-        
-    #     # Create the user
-    #     new_user = self.user_repo.create_user(user_dict)
-        
-    #     if not new_user:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-    #             detail="Failed to create user"
-    #         )
-        
-    #     # Get role names for response
-    #     roles = self.role_repo.get_roles_by_ids(role_ids)
-    #     role_names = [role.get("name", "unknown") for role in roles if role]
-    
-    #     # Prepare response
-    #     response = {
-    #         "id": new_user["id"],
-    #         "username": new_user["username"],
-    #         "email": new_user["email"],
-    #         "full_name": new_user["full_name"],
-    #         "phone": new_user.get("phone"),
-    #         "department": new_user.get("department"),
-    #         "roles": role_names,
-    #         "created_at": new_user["created_at"]
-    #     }
-        
-    #     return response
-    
+
     
     def register_user(self, username, email, password, full_name, phone=None, department=None, role_ids=None, reporting_user_id=None):
         """Register a new user"""
@@ -387,8 +307,7 @@ class AuthService:
                 print(f"[{get_ist_timestamp()}] Warning: Failed to create hierarchy: {str(e)}")
                 # Don't fail user creation if hierarchy creation fails
                 pass
-
-        # Prepare response with all required UserResponse fields
+            
         # Prepare response with all required UserResponse fields
         response = {
             "id": str(new_user["id"]),  # Ensure id is always a string

@@ -244,43 +244,6 @@ async def delete_role(
             detail=error_message
         )
 
-@roles_router.get("/api/lead/users/sales", response_model=List[User])
-def get_sales_users(role: Optional[str] = Query(None, description="Filter users by role")):
-    """
-    Get all sales team users, optionally filtered by role.
-    - If role is specified, returns only users with that role
-    - If no role is specified, returns all users who can be assigned leads
-    """
-    users = [
-        User(id="1", username="alice", role=Role.sales, active=True),
-        User(id="2", username="bob", role=Role.support, active=False),
-        User(id="3", username="carol", role=Role.sales, active=True),
-    ]
-    if role:
-        try:
-            role_enum = Role(role)
-            filtered_users = [user for user in users if user.role == role_enum]
-            return filtered_users
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
-    return [user for user in users if user.active]
-
-@roles_router.post("/api/lead/leads/assign")
-def assign_lead(lead_assignment: dict):
-    """
-    Assign a lead to a user with specific role
-    """
-    lead_id = lead_assignment.get("lead_id")
-    user_id = lead_assignment.get("user_id")
-    role = lead_assignment.get("role")
-    notes = lead_assignment.get("notes", "")
-    if not lead_id or not user_id:
-        raise HTTPException(status_code=400, detail="Missing lead_id or user_id")
-    return {"message": "Lead assigned successfully", "lead_id": lead_id, "user_id": user_id, "role": role, "notes": notes}
-
-
-
-
 
 # Endpoint to get all senior roles (roles with no report_to)
 @roles_router.get("/senior-roles", response_model=List[RoleResponse])

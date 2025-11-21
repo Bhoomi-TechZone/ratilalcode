@@ -1,14 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { fetchEmployeeLeads, fetchEmployeeDocuments } from '../../utils/hrAPI';
+import { fetchEmployeeDocuments } from '../../utils/hrAPI';
 import DocumentUploader from '../common/DocumentUploader';
 import { formatDate } from '../../utils/dateUtils';
 
 const EmployeeDetails = ({ employee, onEdit }) => {
   const [activeTab, setActiveTab] = useState('profile');
-  const [leads, setLeads] = useState([]);
   const [documents, setDocuments] = useState([]);
-  const [selectedLead, setSelectedLead] = useState(null);
-  const [leadDetails, setLeadDetails] = useState(null);
   const [showUploader, setShowUploader] = useState(false);
   const [loading, setLoading] = useState({
     leads: false,
@@ -50,35 +47,7 @@ const EmployeeDetails = ({ employee, onEdit }) => {
     
     return defaultValue;
   };
-
-  // Fetch employee leads
-  useEffect(() => {
-    const loadEmployeeLeads = async () => {
-      if (activeTab !== 'leads') return;
-      
-      setLoading(prev => ({ ...prev, leads: true }));
-      try {
-        const employeeId = employee._id || employee.id || employee.user_id || employee.employee_id;
-        const result = await fetchEmployeeLeads(employeeId);
-        
-        if (Array.isArray(result)) {
-          setLeads(result);
-        } else if (result && result.data && Array.isArray(result.data)) {
-          setLeads(result.data);
-        } else {
-          console.error('Unexpected employee leads data format:', result);
-          setLeads([]);
-        }
-      } catch (error) {
-        console.error('Error loading employee leads:', error);
-      } finally {
-        setLoading(prev => ({ ...prev, leads: false }));
-      }
-    };
-    
-    loadEmployeeLeads();
-  }, [employee, activeTab]);
-
+  
   // Fetch employee documents
   useEffect(() => {
     const loadEmployeeDocuments = async () => {
@@ -153,16 +122,6 @@ const EmployeeDetails = ({ employee, onEdit }) => {
             onClick={() => setActiveTab('profile')}
           >
             Profile
-          </button>
-          <button
-            className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
-              activeTab === 'leads' 
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-            onClick={() => setActiveTab('leads')}
-          >
-            Leads
           </button>
           <button
             className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
@@ -336,67 +295,6 @@ const EmployeeDetails = ({ employee, onEdit }) => {
                 </div>
               </div>
             </div>
-          </div>
-        )}
-        
-        {/* Leads Tab */}
-        {activeTab === 'leads' && (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-gray-700">Assigned Leads</h3>
-            </div>
-            
-            {loading.leads ? (
-              <div className="flex justify-center items-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-              </div>
-            ) : leads.length === 0 ? (
-              <div className="bg-gray-50 p-6 text-center rounded-md">
-                <p className="text-gray-500">No leads assigned to this employee yet.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lead ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Assigned</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {leads.map((lead) => (
-                      <tr key={lead._id || lead.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{lead.lead_id}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{lead.name || lead.customer_name}</div>
-                          <div className="text-xs text-gray-500">{lead.phone || lead.contact}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                            ${lead.status === 'active' ? 'bg-green-100 text-green-800' : 
-                              lead.status === 'closed' ? 'bg-red-100 text-red-800' : 
-                              lead.status === 'converted' ? 'bg-blue-100 text-blue-800' : 
-                              'bg-yellow-100 text-yellow-800'}`}>
-                            {lead.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(lead.assigned_date || lead.date_assigned || lead.created_at)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {lead.source || 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
         )}
         

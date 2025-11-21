@@ -177,22 +177,48 @@ const AttendanceManagement = () => {
   // Fetch today's attendance for current user
   const fetchUserAttendance = async () => {
     if (!currentUser) return;
-    
+
     setLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      // Prefer employee_id (must match your POST), fallback to other possible user keys
+      const employeeId =
+        currentUser.employee_id ||
+        currentUser.userid ||
+        currentUser.user_id ||
+        currentUser.id ||
+        currentUser.username;
+
+      // Fetch all recent records for robust matching (remove paging for now if not needed)
       const userAttendance = await fetchAttendance({
-        date: today,
-        employee: currentUser.user_id || currentUser.username || currentUser.id,
-        page: 1,
-        limit: 1
+        employee: employeeId
+        // You can add { limit: 10 } if you want, but better to let backend filter
       });
-      
-      if (userAttendance && userAttendance.length > 0) {
-        setTodayAttendance(userAttendance[0]);
-      } else {
-        setTodayAttendance(null);
-      }
+
+      // Find today's attendance for current user (ID and date checks)
+      const todaysAttendance = Array.isArray(userAttendance)
+        ? userAttendance.find(record => {
+            // ID match: field might be employee_id, user_id, or userid in backend record!
+            const idMatch =
+              record.employee_id === employeeId ||
+              record.user_id === employeeId ||
+              record.userid === employeeId;
+
+            // Date match: prefer 'date', then fallback to 'checkintime' or even 'check_in'
+            let dateMatch = false;
+            if (record.date && record.date.length >= 10) {
+              dateMatch = record.date.slice(0, 10) === todayStr;
+            } else if (record.checkintime) {
+              dateMatch = new Date(record.checkintime).toISOString().split('T')[0] === todayStr;
+            } else if (record.check_in) {
+              dateMatch = new Date(record.check_in).toISOString().split('T')[0] === todayStr;
+            }
+            return idMatch && dateMatch;
+          })
+        : null;
+
+      setTodayAttendance(todaysAttendance || null);
     } catch (error) {
       console.error('Error fetching user attendance:', error);
       setTodayAttendance(null);
@@ -200,7 +226,8 @@ const AttendanceManagement = () => {
       setLoading(false);
     }
   };
-  
+
+
   // Fetch employees list for the dropdown
   useEffect(() => {
     const getEmployees = async () => {
@@ -209,7 +236,7 @@ const AttendanceManagement = () => {
         
         // Use the utility function to fetch employees
         const employeeData = await fetchEmployees();
-        
+        console.log('Raw employees:', employeeData);
         // Ensure employees is always an array, even if the API returns something else
         if (Array.isArray(employeeData)) {
           setEmployees(employeeData);
@@ -384,25 +411,27 @@ const AttendanceManagement = () => {
       alert('Location is required for check-in. Please enable location services.');
       return;
     }
-
     try {
       const now = new Date();
       const checkInData = {
-        user_id: currentUser.user_id || currentUser.username || currentUser.id,
+        employee_id: currentUser.employee_id || currentUser.user_id || currentUser.id || currentUser.username,
         status: 'present',
-        checkin_time: now.toISOString(),
-        geo_lat: location.latitude,
+        date: now.toISOString().split('T')[0],           // YYYY-MM-DD
+        checkintime: now.toISOString(),                  // ISO string
+        geo_lat: location.latitude,                      // use geo_lat and geo_long if your backend expects these names
         geo_long: location.longitude,
-        location: location.address || `${location.latitude}, ${location.longitude}`,
+        location: location.address || `${location.latitude},${location.longitude}`,
         notes: 'Self check-in'
       };
-
-      await apiMarkAttendance(checkInData);
+      console.log("Check-in payload:", checkInData);
+      await apiMarkAttendance(checkInData);              // must match backend model
       alert('Checked in successfully!');
-      fetchUserAttendance(); // Refresh user's attendance
+      await fetchUserAttendance();
+      // Extra debug
+      console.log("Updated todayAttendance after check-in:", todayAttendance);
     } catch (error) {
       console.error('Error checking in:', error);
-      alert(`Check-in failed: ${error.message}`);
+      alert('Check-in failed: ' + error.message);
     }
   };
 
@@ -412,28 +441,28 @@ const AttendanceManagement = () => {
       alert('No check-in record found for today.');
       return;
     }
-
     if (!location.latitude) {
       alert('Location is required for check-out. Please enable location services.');
       return;
     }
-
     try {
       const now = new Date();
       const checkOutData = {
-        checkout_time: now.toISOString(),
-        checkout_geo_lat: location.latitude,
-        checkout_geo_long: location.longitude,
-        checkout_location: location.address || `${location.latitude}, ${location.longitude}`,
-        notes: todayAttendance.notes ? `${todayAttendance.notes} | Self check-out` : 'Self check-out'
+        checkouttime: now.toISOString(),
+        geo_lat: location.latitude,              // use same key as backend expects
+        geo_long: location.longitude,
+        location: location.address || `${location.latitude},${location.longitude}`,
+        notes: todayAttendance.notes ? todayAttendance.notes + ' Self check-out' : 'Self check-out'
       };
-
-      await apiEditAttendanceRecord(todayAttendance.id, checkOutData);
+      console.log("Check-out payload:", checkOutData);
+      await apiEditAttendanceRecord(todayAttendance.attendance_id, checkOutData);
       alert('Checked out successfully!');
-      fetchUserAttendance(); // Refresh user's attendance
+      await fetchUserAttendance();
+      // Extra debug
+      console.log("Updated todayAttendance after check-out:", todayAttendance);
     } catch (error) {
       console.error('Error checking out:', error);
-      alert(`Check-out failed: ${error.message}`);
+      alert('Check-out failed: ' + error.message);
     }
   };
 
@@ -688,7 +717,7 @@ const AttendanceManagement = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
-                      {record.full_name || record.employee_name || record.name || 'Unknown Employee'}
+                      {record.full_name || record.user_name || record.employee_name || record.name || 'Unknown Employee'}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -696,9 +725,6 @@ const AttendanceManagement = () => {
                       {record.role || record.position || record.roles?.[0] || 'Employee'}
                     </span>
                   </td>
-                  {/* <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {record.department || 'Not Specified'}
-                  </td> */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {record.checkin_time || '-'}
                   </td>
@@ -732,16 +758,14 @@ const AttendanceManagement = () => {
                         onClick={() => {
                           setCurrentRecord(record);
                           setModalType('edit');
-                          
                           // For edit mode, we need to convert times back to HH:MM format for the time inputs
                           const checkinParts = record.checkin_time ? record.checkin_time.split(':') : ['09', '00'];
                           const checkoutParts = record.checkout_time ? record.checkout_time.split(':') : ['17', '00'];
                           const checkinTime = `${checkinParts[0].padStart(2, '0')}:${checkinParts[1].padStart(2, '0')}`;
                           const checkoutTime = `${checkoutParts[0].padStart(2, '0')}:${checkoutParts[1].padStart(2, '0')}`;
-                          
                           setFormData({
                             user_id: record.user_id,
-                            employee_name: record.full_name || record.employee_name,
+                            employee_name: record.full_name || record.employee_name || record.name || 'Unknown Employee',
                             date: record.date,
                             status: record.status,
                             checkin_time: checkinTime,
@@ -763,133 +787,6 @@ const AttendanceManagement = () => {
         </div>
       </div>
       </>
-      )}
-
-      {/* User View - Personal Check-in/Check-out */}
-      {userRole === 'user' && (
-        <>
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">My Attendance</h2>
-            <p className="text-gray-600">Check in and check out for today</p>
-            {currentUser && (
-              <p className="text-lg font-medium text-blue-600 mt-2">
-                Welcome, {currentUser.full_name || currentUser.name || currentUser.username}!
-              </p>
-            )}
-          </div>
-
-          {/* Location Status */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className={`p-3 rounded-full ${location.latitude ? 'bg-green-100' : 'bg-yellow-100'}`}>
-                  <Clock className={`w-6 h-6 ${location.latitude ? 'text-green-600' : 'text-yellow-600'}`} />
-                </div>
-                <div className="ml-4">
-                  <p className="text-lg font-semibold text-gray-900">
-                    {location.latitude ? 'Location Detected' : 'Location Required'}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {locationLoading ? 'Getting your location...' : 
-                     location.address || (location.latitude ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}` : 'Please enable location services')}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={getCurrentLocation}
-                disabled={locationLoading}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {locationLoading ? 'Getting Location...' : 'Refresh Location'}
-              </button>
-            </div>
-          </div>
-
-          {/* Today's Attendance Status */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Today's Status</h3>
-            {loading ? (
-              <div className="text-center py-8">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
-                <p className="text-gray-600">Loading your attendance...</p>
-              </div>
-            ) : todayAttendance ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-green-600">Status</p>
-                  <p className="text-lg font-bold text-green-800 capitalize">{todayAttendance.status}</p>
-                </div>
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <Clock className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-blue-600">Check In</p>
-                  <p className="text-lg font-bold text-blue-800">
-                    {todayAttendance.checkin_time ? new Date(todayAttendance.checkin_time).toLocaleTimeString() : '-'}
-                  </p>
-                </div>
-                <div className="text-center p-4 bg-purple-50 rounded-lg">
-                  <Clock className="w-8 h-8 text-purple-600 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-purple-600">Check Out</p>
-                  <p className="text-lg font-bold text-purple-800">
-                    {todayAttendance.checkout_time ? new Date(todayAttendance.checkout_time).toLocaleTimeString() : 'Not yet'}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <XCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">No attendance record for today</p>
-              </div>
-            )}
-          </div>
-
-          {/* Check-in/Check-out Buttons */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button
-                onClick={handleCheckIn}
-                disabled={!location.latitude || (todayAttendance && todayAttendance.checkin_time)}
-                className={`w-full py-4 px-6 rounded-lg font-semibold text-lg flex items-center justify-center ${
-                  !location.latitude || (todayAttendance && todayAttendance.checkin_time)
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                }`}
-              >
-                <CheckCircle className="w-6 h-6 mr-2" />
-                {todayAttendance && todayAttendance.checkin_time ? 'Already Checked In' : 'Check In'}
-              </button>
-              
-              <button
-                onClick={handleCheckOut}
-                disabled={!location.latitude || !todayAttendance || !todayAttendance.checkin_time || todayAttendance.checkout_time}
-                className={`w-full py-4 px-6 rounded-lg font-semibold text-lg flex items-center justify-center ${
-                  !location.latitude || !todayAttendance || !todayAttendance.checkin_time || todayAttendance.checkout_time
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-red-600 hover:bg-red-700 text-white'
-                }`}
-              >
-                <XCircle className="w-6 h-6 mr-2" />
-                {!todayAttendance || !todayAttendance.checkin_time 
-                  ? 'Check In First' 
-                  : todayAttendance.checkout_time 
-                    ? 'Already Checked Out' 
-                    : 'Check Out'}
-              </button>
-            </div>
-            
-            {(!location.latitude) && (
-              <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center">
-                  <AlertCircle className="w-5 h-5 text-yellow-600 mr-2" />
-                  <p className="text-sm text-yellow-800">
-                    Location access is required for attendance. Please click "Refresh Location" and allow location access.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
       )}
       
       {/* Modal for Creating/Editing Attendance - Admin Only */}
@@ -931,8 +828,11 @@ const AttendanceManagement = () => {
                   >
                     <option value="">Select an employee</option>
                     {Array.isArray(employees) ? employees.map(emp => (
-                      <option key={emp._id || emp.user_id || emp.id || Math.random()} value={emp.user_id || emp.username || emp.id}>
-                        {emp.name || emp.full_name || emp.username || emp.email || "Employee"} ({emp.user_id || emp.username || emp.id})
+                      <option
+                        key={emp.id || emp.user_id || Math.random()}
+                        value={emp.user_id || emp.username || emp.id}
+                      >
+                        {emp.name || emp.full_name || emp.email || "Employee"}
                       </option>
                     )) : <option value="">No employees found</option>}
                   </select>

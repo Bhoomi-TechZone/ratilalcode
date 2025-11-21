@@ -7,6 +7,7 @@ from app.database.schemas.permission import (
     PermissionUpdate,
     PermissionResponse
 )
+from app.database.repositories.role_repository import RoleRepository
 from app.database.repositories.permission_repository import PermissionRepository
 from app.services.auth_service import AuthService
 
@@ -67,6 +68,63 @@ async def create_permission(
         )
     
     return created_permission
+
+# @permission_router.get("/my", response_model=List[PermissionResponse])
+# async def get_my_permissions(current_user: dict = Depends(AuthService.get_current_user)):
+#     """
+#     Get all the permissions for the current authorized user only, Except admin.
+#     """
+#     print("Current user:", current_user.get("username"), current_user.get("token_data", {}).get("roles", []))
+#     permission_repo = PermissionRepository()
+#     role_repo = RoleRepository() 
+#     user_role_codes = current_user.get("token_data", {}).get("roles", [])
+#     user_permissions = []
+#     checked_permission_ids = set()
+#     for role_code in user_role_codes:
+#         role = role_repo.get_role_by_name(role_code)  # FIXED LINE
+#         if role and "permissions" in role:
+#             for perm_id in role["permissions"]:
+#                 if perm_id not in checked_permission_ids:
+#                     perm = permission_repo.get_permission_by_id(perm_id)
+#                     if perm:
+#                         user_permissions.append(perm)
+#                         checked_permission_ids.add(perm_id)
+#     return user_permissions
+
+@permission_router.get("/my", response_model=List[PermissionResponse])
+async def get_my_permissions(current_user: dict = Depends(AuthService.get_current_user)):
+    permission_repo = PermissionRepository()
+    role_repo = RoleRepository()
+    
+    # Use role_ids not roles!
+    user_role_ids = current_user.get("role_ids", [])
+    print("User role IDs:", user_role_ids)
+
+    permissions_in_db = list(permission_repo.collection.find({}, {"_id": 0, "code": 1, "name": 1}))
+    print("Permissions in DB:", permissions_in_db)
+
+    user_permissions = []
+    checked_permission_codes = set()
+
+    for role_id in user_role_ids:
+        role = role_repo.get_role_by_id(role_id)
+        print("Role for ID:", role_id, "->", role)
+        if role and "permissions" in role:
+            print("Role permissions:", role["permissions"])
+            for perm_code in role["permissions"]:
+                if perm_code not in checked_permission_codes:
+                    perm = permission_repo.get_permission_by_code(perm_code)
+                    print(f"Checking perm_code '{perm_code}': Found permission: {perm}")
+                    if perm:
+                        user_permissions.append(perm)
+                        checked_permission_codes.add(perm_code)
+                    else:
+                        print(f"[WARN] Permission with code '{perm_code}' not found in DB")
+        else:
+            print(f"[WARN] Role '{role_id}' not found or has no 'permissions' field")
+    print("Final user permissions:", user_permissions)
+    return user_permissions
+
 
 @permission_router.get("/{permission_id}", response_model=PermissionResponse)
 async def get_permission(
@@ -164,27 +222,3 @@ async def delete_permission(
         )
     
     return {"message": f"Permission {existing_permission['name']} deleted successfully"}
-
-
-@permission_router.get("/my", response_model=List[PermissionResponse])
-async def get_my_permissions(current_user: dict = Depends(AuthService.get_current_user)):
-    """Get all permissions assigned to the current user"""
-    permission_repo = PermissionRepository()
-    
-    # Get current user's roles (token_data structure may vary)
-    user_role_codes = current_user.get("token_data", {}).get("roles", [])
-    user_permissions = []
-    checked_permission_ids = set()
-
-    for role_code in user_role_codes:
-        role = permission_repo.get_role_by_name(role_code)
-        if role and "permissions" in role:
-            for perm_id in role["permissions"]:
-                if perm_id not in checked_permission_ids:
-                    perm = permission_repo.get_permission_by_id(perm_id)
-                    if perm:
-                        user_permissions.append(perm)
-                        checked_permission_ids.add(perm_id)
-    return user_permissions
-
-

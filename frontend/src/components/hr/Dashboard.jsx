@@ -218,9 +218,9 @@ const Dashboard = ({ dashboardStats, employees, hasPermission }) => {
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 bg-gray-50 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-600 mb-2">Lead Response Time</h4>
+              <h4 className="text-sm font-medium text-gray-600 mb-2">Inventory/Stocks</h4>
               <p className="text-2xl font-bold text-blue-600">{dashboardStats.average_lead_response_time || 'N/A'}</p>
-              <p className="text-xs text-gray-500">Average response time</p>
+              <p className="text-xs text-gray-500">Number of items</p>
             </div>
             <div className="p-4 bg-gray-50 rounded-lg">
               <h4 className="text-sm font-medium text-gray-600 mb-2">Activities Completed</h4>
@@ -228,7 +228,7 @@ const Dashboard = ({ dashboardStats, employees, hasPermission }) => {
               <p className="text-xs text-gray-500">Tasks completed today</p>
             </div>
             <div className="p-4 bg-gray-50 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-600 mb-2">Lead Conversion Rate</h4>
+              <h4 className="text-sm font-medium text-gray-600 mb-2">Utility Usage Rate</h4>
               <p className="text-2xl font-bold text-green-600">{dashboardStats.lead_conversion_rate || '0%'}</p>
               <p className="text-xs text-gray-500">Overall conversion</p>
             </div>

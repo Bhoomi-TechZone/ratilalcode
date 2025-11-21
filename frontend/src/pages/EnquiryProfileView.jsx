@@ -31,7 +31,6 @@ const sectionCard =
   );
 }
 
-
 function AddPaymentModal({ open, onClose, onSubmit, newPayment, setNewPayment }) {
   const [submitting, setSubmitting] = useState(false);
 
