@@ -20,11 +20,22 @@ const UserAttendanceView = () => {
 
   const today = new Date().toISOString().split("T")[0];
 
+  // Helper to get token and validate basic format
+  const getToken = () => {
+    const token = localStorage.getItem("access_token");
+    if (!token || token.split(".").length !== 3) {
+      console.error("Invalid or missing JWT token");
+      return null;
+    }
+    return token;
+  };
+
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        const token = localStorage.getItem("access_token");
+        const token = getToken();
         if (!token) {
+          setCurrentUser(null);
           setIsLoading(false);
           return;
         }
@@ -38,9 +49,11 @@ const UserAttendanceView = () => {
           if (activeTab === "manual") detectLocation();
         } else {
           toast.error("Failed to load user data");
+          console.error("User fetch error:", response.status, await response.text());
         }
-      } catch {
+      } catch (err) {
         toast.error("Error loading user data");
+        console.error("User fetch exception:", err);
       } finally {
         setIsLoading(false);
       }
@@ -53,7 +66,12 @@ const UserAttendanceView = () => {
     if (!userId) return;
     setIsLoading(true);
     try {
-      const token = localStorage.getItem("access_token");
+      const token = getToken();
+      if (!token) {
+        setTodayAttendance(null);
+        setIsLoading(false);
+        return;
+      }
       const response = await fetch(
         `${API_BASE_URL}/api/hr/attendance?user_id=${userId}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -68,15 +86,17 @@ const UserAttendanceView = () => {
         }
       } else {
         setTodayAttendance(null);
+        console.error("Attendance fetch error:", response.status, await response.text());
       }
-    } catch {
+    } catch (err) {
       toast.error("Error loading attendance records");
       setTodayAttendance(null);
+      console.error("Attendance fetch exception:", err);
     } finally {
       setIsLoading(false);
     }
   };
-
+  
   const detectLocation = () => {
     if (!navigator.geolocation) {
       setGeoError("Geolocation not supported");
@@ -108,48 +128,58 @@ const UserAttendanceView = () => {
     );
   };
 
-  const handleCheckIn = async () => {
-    if (!checkInLocation) {
-      toast.error("Location not detected");
-      return;
-    }
-    setIsCheckingIn(true);
-    try {
-      const token = localStorage.getItem("access_token");
-      const response = await fetch(`${API_BASE_URL}/api/hr/attendance/checkin`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: currentUser?.id || currentUser?._id || currentUser?.user_id,
-          date: today,
-          checkin_time: new Date().toISOString(),
-          geo_lat: checkInLocation.latitude,
-          geo_long: checkInLocation.longitude,
-          location: geoAddress,
-          status: "present",
-        }),
-      });
-      if (response.ok) {
-        toast.success("Checked in successfully");
-        fetchAttendance(currentUser.id || currentUser._id || currentUser.user_id);
-      } else {
-        const resData = await response.json();
-        toast.error(resData.detail || "Check-in failed");
+    const handleCheckIn = async () => {
+      if (!checkInLocation) {
+        toast.error("Location not detected");
+        return;
       }
-    } catch {
-      toast.error("Check-in failed");
-    }
-    setIsCheckingIn(false);
-  };
+      const token = getToken();
+      if (!token) {
+        toast.error("No valid access token found, please login again");
+        return;
+      }
+      setIsCheckingIn(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/hr/attendance/checkin`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: currentUser?.id || currentUser?._id || currentUser?.user_id,
+            date: today,
+            checkin_time: new Date().toISOString(),
+            geo_lat: checkInLocation.latitude,
+            geo_long: checkInLocation.longitude,
+            location: geoAddress,
+            status: "present",
+          }),
+        });
+        if (response.ok) {
+          toast.success("Checked in successfully");
+          fetchAttendance(currentUser.id || currentUser._id || currentUser.user_id);
+        } else {
+          const resData = await response.json();
+          toast.error(resData.detail || "Check-in failed");
+          console.error("Check-in failed", await response.text());
+        }
+      } catch (err) {
+        toast.error("Check-in failed");
+        console.error("Check-in exception:", err);
+      }
+      setIsCheckingIn(false);
+    };
 
   const handleCheckOut = async () => {
     if (!checkOutLocation) {
       toast.error("Location not detected");
       return;
     }
+    const token = getToken();
+    if (!token) {
+      toast.error("No valid access token found, please login again");
+      return;
+    }
     setIsCheckingOut(true);
     try {
-      const token = localStorage.getItem("access_token");
       const response = await fetch(`${API_BASE_URL}/api/hr/attendance/checkout`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -168,9 +198,11 @@ const UserAttendanceView = () => {
       } else {
         const resData = await response.json();
         toast.error(resData.detail || "Check-out failed");
+        console.error("Check-out failed", await response.text());
       }
-    } catch {
+    } catch (err) {
       toast.error("Check-out failed");
+      console.error("Check-out exception:", err);
     }
     setIsCheckingOut(false);
   };

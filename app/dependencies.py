@@ -54,14 +54,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+        headers={"WWW-Authenticate": "Bearer"}
     )
-    
     try:
         # Add debugging
         print(f"[DEBUG] Token: {token[:15]}... (truncated)")
-        print(f"[DEBUG] SECRET_KEY: {SECRET_KEY[:5]}... (truncated)")
-        
+        print(f"[DEBUG] SECRET_KEY type: {type(SECRET_KEY)}, value: {str(SECRET_KEY)[:8]}... (truncated)")
+        if not isinstance(SECRET_KEY, str):
+            raise HTTPException(status_code=500, detail=f"SECRET_KEY is not a string. Type: {type(SECRET_KEY)} Value: {SECRET_KEY}")
         try:
             # First try to decode normally
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -234,11 +234,6 @@ async def admin_required(current_user: Dict[str, Any] = Depends(get_current_user
             detail="You do not have permission to create roles. Admin rights required."
         )
 
-    return current_user
-
-
-def sales_team_required(current_user: Dict[str, Any] = Depends(RoleChecker(["admin", "sales"]))):
-    """Requires sales team or admin role"""
     return current_user
 
 

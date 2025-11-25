@@ -64,6 +64,16 @@ def extract_user_roles(current_user: dict) -> List[str]:
     else:
         # Fallback to empty list if roles format is unexpected
         return []
+    
+# Utility for role validation 
+def validate_role_ids(role_ids, db):
+    valid_role_ids = set(r['id'] for r in db.roles.find({}, {'id': 1}))
+    for rid in role_ids:
+        if rid not in valid_role_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Role ID '{rid}' does not exist in roles collection"
+            )
 
 # Utility function to make MongoDB documents JSON-serializable
 def make_serializable(obj):
@@ -290,33 +300,32 @@ async def create_employee(payload: Dict = Body(...)):
         if existing_user:
             raise HTTPException(status_code=400, detail="User ID or email already exists")
         
-        # Create employee data
-        
         # Handle role_ids and roles
         role_ids = payload.get("role_ids", [])
         roles = payload.get("roles", [])
         
-        # If we have role_ids but no roles, try to extract role names
+        # Extract names from role_ids
         if role_ids and not roles:
-            # Try to fetch role info from database to get names
             roles_info = list(db.roles.find({"id": {"$in": role_ids}}))
             if roles_info:
                 roles = [role.get("name", "").lower() for role in roles_info]
                 print(f"[DEBUG] Extracted role names from role_ids: {roles}")
         
-        # If we have roles but no role_ids, try to find corresponding role_ids
+        # Extract role_ids from names
         if roles and not role_ids:
-            # Try to fetch role IDs from role names
             role_names_lower = [r.lower() if isinstance(r, str) else r.get("name", "").lower() for r in roles]
             roles_info = list(db.roles.find({"name": {"$in": role_names_lower}}))
             if roles_info:
                 role_ids = [role.get("id") for role in roles_info]
                 print(f"[DEBUG] Found role_ids from role names: {role_ids}")
-                
-        # Ensure user_id is available - generate one if not provided
+
+        # --- VALIDATE ROLE IDS ---
+        # Always check role_ids are valid before proceeding
+        validate_role_ids(role_ids, db)
+            
+        # Generate user_id if not provided
         user_id = payload.get("user_id")
         if not user_id:
-            # Generate a user_id similar to employees_new.py
             import random
             while True:
                 user_id = f"USR-{random.randint(100, 999)}"
@@ -333,8 +342,6 @@ async def create_employee(payload: Dict = Body(...)):
             "phone": payload.get("phone", ""),
             "department": payload.get("department", ""),
             "position": payload.get("position", ""),
-            
-            # Hash password properly using AuthService if provided
             "password": get_hashed_password(payload.get("password", "")),
             "role_ids": role_ids,
             "roles": roles,
@@ -389,25 +396,17 @@ async def update_employee(employee_id: str, payload: Dict = Body(...)):
     """Update an existing employee"""
     try:
         db = get_database()
-        
-        # Log the incoming payload for debugging
         print(f"[DEBUG] Updating employee {employee_id} with payload: {json.dumps(payload, default=str)}")
-        
-        # Log specific fields from payload that we're interested in
         important_fields = ["user_id", "full_name", "name", "email", "role_ids", "roles", "bank_details", "emergency_contact", 
-                           "bank_name", "bank_account_number", "bank_ifsc", "reporting_user_id", "reports_to"]
+                            "bank_name", "bank_account_number", "bank_ifsc", "reporting_user_id", "reports_to"]
         debug_fields = {k: payload.get(k) for k in important_fields if k in payload}
         print(f"[DEBUG] Important fields in payload: {json.dumps(debug_fields, default=str)}")
-        
-        # Log all keys in payload for debugging
         print(f"[DEBUG] All payload keys: {list(payload.keys())}")
-        
-        # Find existing employee
+
         existing_employee = db.users.find_one({"user_id": employee_id})
         if not existing_employee:
             raise HTTPException(status_code=404, detail="Employee not found")
-        
-        # Prepare update data
+
         update_data = {}
         updatable_fields = [
             "full_name", "name", "email", "phone", "department", "position", 
@@ -420,8 +419,7 @@ async def update_employee(employee_id: str, payload: Dict = Body(...)):
             "is_half_day", "reason", "failed_login_attempts", "last_login",
             "employee_id", "id", "user_id", "role_name", "role_names"
         ]
-        
-        # Field mappings for alternative field names
+
         field_mappings = {
             "name": "full_name",
             "dob": "date_of_birth",
@@ -433,10 +431,9 @@ async def update_employee(employee_id: str, payload: Dict = Body(...)):
             "reports_to": "reporting_user_id",
             "reporting_user_id": "reports_to"
         }
-        
+
         # Handle role_ids and roles relationship
         if "role_ids" in payload and not "roles" in payload:
-            # Try to fetch role info from database to get names
             role_ids = payload["role_ids"]
             if not isinstance(role_ids, list):
                 role_ids = [role_ids]
@@ -444,10 +441,8 @@ async def update_employee(employee_id: str, payload: Dict = Body(...)):
             if roles_info:
                 payload["roles"] = [role.get("name", "").lower() for role in roles_info]
                 print(f"[DEBUG] Extracted role names from role_ids: {payload['roles']}")
-        
-        # If we have roles but no role_ids, try to find corresponding role_ids
+
         if "roles" in payload and not "role_ids" in payload:
-            # Try to fetch role IDs from role names
             role_names = payload["roles"]
             if not isinstance(role_names, list):
                 role_names = [role_names]
@@ -456,13 +451,15 @@ async def update_employee(employee_id: str, payload: Dict = Body(...)):
             if roles_info:
                 payload["role_ids"] = [role.get("id") for role in roles_info]
                 print(f"[DEBUG] Found role_ids from role names: {payload['role_ids']}")
-        
-        # Handle single role field
+
+        # --- VALIDATE ROLE IDS ON UPDATE ---
+        if "role_ids" in payload:
+            validate_role_ids(payload["role_ids"], db)
+
+        # Handle single role field (same as before)
         if "role" in payload:
             role_name = payload["role"]
             update_data["role"] = role_name
-            
-            # If role_ids and roles are not already set, try to find role_id for this role
             if not "role_ids" in update_data and not "roles" in update_data:
                 role_info = db.roles.find_one({"name": {"$regex": f"^{role_name}$", "$options": "i"}})
                 if role_info:
@@ -471,13 +468,9 @@ async def update_employee(employee_id: str, payload: Dict = Body(...)):
                     print(f"[DEBUG] Found role_id {role_info.get('id')} for role name {role_name}")
                 else:
                     print(f"[DEBUG] Could not find role_id for role name {role_name}")
-            
-            # Log for debugging
             print(f"[DEBUG] Processing role field: {role_name}")
-                
-        # Handle role_details if provided (typically from a MongoDB document)
+
         if "role_details" in payload and isinstance(payload["role_details"], list) and payload["role_details"]:
-            # Extract role IDs and role names from role_details
             role_ids = []
             role_names = []
             for role_detail in payload["role_details"]:
@@ -486,42 +479,33 @@ async def update_employee(employee_id: str, payload: Dict = Body(...)):
                         role_ids.append(role_detail["id"])
                     if "name" in role_detail:
                         role_names.append(role_detail["name"])
-            
             if role_ids and not "role_ids" in payload:
                 update_data["role_ids"] = role_ids
             if role_names and not "roles" in payload:
                 update_data["roles"] = role_names
-        
-        # Handle password update using consistent hashing if provided
+
         if "password" in payload and payload["password"]:
             from app.services.auth_service import AuthService
             auth_service = AuthService()
             update_data["password"] = auth_service.get_password_hash(payload["password"])
             print(f"[DEBUG] Password updated for employee {employee_id} using AuthService")
-        
-        # Process standard fields
+
         for field in updatable_fields:
             if field in payload:
-                # Special handling for certain fields
                 if field == "department" and payload[field] == "Marketing":
-                    # Log department change
                     print(f"[DEBUG] Processing department change: {payload[field]}")
-                
                 update_data[field] = payload[field]
-        
-        # Handle alternative field names
+
         for alt_field, std_field in field_mappings.items():
             if alt_field in payload and payload[alt_field] is not None:
                 update_data[std_field] = payload[alt_field]
-        
-        # Handle emergency contact as object
+
         if "emergency_contact" in payload and isinstance(payload["emergency_contact"], dict):
             if "name" in payload["emergency_contact"]:
                 update_data["emergency_contact_name"] = payload["emergency_contact"]["name"]
             if "phone" in payload["emergency_contact"]:
                 update_data["emergency_contact_phone"] = payload["emergency_contact"]["phone"]
-        
-        # Handle bank details as object
+
         if "bank_details" in payload and isinstance(payload["bank_details"], dict):
             if "bank_name" in payload["bank_details"]:
                 update_data["bank_name"] = payload["bank_details"]["bank_name"]
@@ -533,82 +517,57 @@ async def update_employee(employee_id: str, payload: Dict = Body(...)):
                 update_data["bank_ifsc"] = payload["bank_details"]["ifsc"]
             if "ifsc_code" in payload["bank_details"]:
                 update_data["bank_ifsc"] = payload["bank_details"]["ifsc_code"]
-                
-            # Log the bank details for debugging
             print(f"[DEBUG] Processing bank details: {json.dumps(payload['bank_details'], default=str)}")
-        
-        # Handle nested salary field if it comes as an object
+
         if "salary_details" in payload and isinstance(payload["salary_details"], dict):
             if "amount" in payload["salary_details"]:
                 update_data["salary"] = payload["salary_details"]["amount"]
-        
-        # Handle location if it comes as an object with coordinates
+
         if "location_details" in payload and isinstance(payload["location_details"], dict):
             if "address" in payload["location_details"]:
                 update_data["location"] = payload["location_details"]
-        
-        # Add direct support for reports_to field (equivalent to reporting_user_id)
+
         if "reports_to" in payload and not "reporting_user_id" in update_data:
             update_data["reporting_user_id"] = payload["reports_to"]
         elif "reporting_user_id" in payload and not "reports_to" in update_data:
             update_data["reports_to"] = payload["reporting_user_id"]
-            
-        # Handle any MongoDB special fields if they are present in the payload
+
         if "_id" in payload and isinstance(payload["_id"], dict) and "$oid" in payload["_id"]:
-            # Don't include _id in update data as it's immutable
             print(f"[DEBUG] Detected MongoDB document with _id: {payload['_id']['$oid']}")
-            
-        # Handle date fields in MongoDB format
+
         date_fields = ["created_at", "updated_at", "last_login"]
         for date_field in date_fields:
             if date_field in payload and isinstance(payload[date_field], dict) and "$date" in payload[date_field]:
                 try:
-                    # Parse ISO date string from MongoDB format
                     update_data[date_field] = datetime.fromisoformat(
                         payload[date_field]["$date"].replace("Z", "+00:00")
                     )
                 except Exception as e:
                     print(f"[WARNING] Could not parse date field {date_field}: {str(e)}")
-        
+
         if update_data:
             update_data["updated_at"] = datetime.now()
-            
-            # Log the final update data for debugging
             print(f"[DEBUG] Final update data: {json.dumps(update_data, default=str)}")
-            
-            # Update employee
             result = db.users.update_one(
                 {"user_id": employee_id},
                 {"$set": update_data}
             )
-            
             if result.matched_count == 0:
                 raise HTTPException(status_code=404, detail="Employee not found")
-        
-            # Get updated employee data
             updated_employee = db.users.find_one({"user_id": employee_id})
-            
-            # Log what fields were updated
             print(f"[INFO] Employee {employee_id} updated successfully. Fields updated: {list(update_data.keys())}")
-            
-            # Compare original payload with what was updated
             missing_fields = [field for field in payload.keys() if field not in update_data and field not in ["_id", "id"]]
             if missing_fields:
                 print(f"[WARNING] Some fields in payload were not processed: {missing_fields}")
-        
-            # Return response format that exactly matches what frontend expects
             response = {
                 "success": True,
                 "message": "Employee updated successfully",
                 "updated_user": True,
                 "updated_employee": True
             }
-            
-            # Only add these fields if needed for debugging
             if "debug" in payload and payload["debug"]:
                 response["fields_updated"] = list(update_data.keys())
                 response["data"] = updated_employee
-                
             return make_serializable(response)
         else:
             return make_serializable({
@@ -624,6 +583,7 @@ async def update_employee(employee_id: str, payload: Dict = Body(...)):
     except Exception as e:
         logger.error(f"Error updating employee {employee_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update employee: {str(e)}")
+
 
 @employees_router.delete("/{employee_id}", status_code=200)
 async def delete_employee(employee_id: str):
@@ -1112,6 +1072,8 @@ async def checkin_attendance(
                 } if latitude and longitude else None,
                 "created_at": current_time,
                 "marked_by": current_user.get("full_name", current_user.get("name", "Self")),
+                "source": payload.get("source", "manual"),  # e.g. manual, biometric, geo
+                "biometric_id": payload.get("biometric_id"),
                 "updated_at": current_time
             }
             

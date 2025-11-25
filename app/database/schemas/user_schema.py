@@ -84,7 +84,7 @@ class UserResponse(UserBase):
 
 class PasswordReset(BaseModel):
     """Model for password reset request"""
-    email: EmailStr = Field(..., example="soheru@example.com")
+    email: EmailStr = Field(..., example="crm@example.com")
 
 class PasswordChange(BaseModel):
     """Model for changing user password"""

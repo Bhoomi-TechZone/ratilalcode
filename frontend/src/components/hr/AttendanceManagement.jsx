@@ -45,7 +45,8 @@ const AttendanceManagement = () => {
     checkout_time: '17:00',
     notes: ''
   });
-  const [authError, setAuthError] = useState(false);
+    const [authError, setAuthError] = useState(false);
+    const [authErrorMsg, setAuthErrorMsg] = useState('');
   const [userRole, setUserRole] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
   const [location, setLocation] = useState({ latitude: null, longitude: null, address: '' });
@@ -192,7 +193,8 @@ const AttendanceManagement = () => {
 
       // Fetch all recent records for robust matching (remove paging for now if not needed)
       const userAttendance = await fetchAttendance({
-        employee: employeeId
+        employee: employeeId,
+        current_user_roles: Array.isArray(currentUser?.roles) ? currentUser.roles : (currentUser?.role ? [currentUser.role] : ['user'])
         // You can add { limit: 10 } if you want, but better to let backend filter
       });
 
@@ -276,7 +278,8 @@ const AttendanceManagement = () => {
         employee: filters.employee !== 'all' ? filters.employee : '',
         status: filters.status !== 'all' ? filters.status : undefined,
         page: 1,
-        limit: 100
+        limit: 100,
+        current_user_roles: Array.isArray(currentUser?.roles) ? currentUser.roles : (currentUser?.role ? [currentUser.role] : ['user'])
       });
       
       console.log("Attendance data array:", attendanceData);

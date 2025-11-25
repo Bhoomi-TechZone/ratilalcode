@@ -23,7 +23,10 @@ from app.routes.sites_manage import site_router
 from app.routes.employees_new import employees_router as yelop  
 from app.routes.hrstaffroute import hr_staff_router    
 from app.routes.access_check import access_router  
-# Import the direct router to ensure the direct path works
+
+from dotenv import load_dotenv
+load_dotenv()  
+
 
 # Create the FastAPI app
 app = FastAPI(

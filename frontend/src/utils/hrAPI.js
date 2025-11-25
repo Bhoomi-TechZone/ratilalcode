@@ -12,9 +12,14 @@ import { API_BASE_URL } from './hrConstants';
  * @returns {string|null} The authentication token or null if not found
  */
 export const getAuthToken = () => {
-  return localStorage.getItem('access_token') || 
-         localStorage.getItem('token') ||
-         sessionStorage.getItem('token');
+  const token = localStorage.getItem('access_token') || 
+                localStorage.getItem('token') ||
+                sessionStorage.getItem('token');
+  // Ensure token is a non-empty string
+  if (typeof token === 'string' && token.trim().length > 0) {
+    return token.trim();
+  }
+  return null;
 };
 
 /**
@@ -25,19 +30,14 @@ export const getAuthToken = () => {
  */
 export const apiRequest = async (endpoint, options = {}) => {
   const token = getAuthToken();
-  
-  if (!token) {
-    throw new Error('Authentication token not found');
-  }
-  
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
-  
   const headers = {
-    'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
     ...(options.headers || {})
   };
-  
+  if (token) {
+    headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+  }
   const response = await fetch(url, {
     ...options,
     headers
@@ -82,6 +82,9 @@ export const fetchAttendance = async (filters = {}) => {
   if (filters.status && filters.status !== 'all') queryParams.append('status', filters.status);
   if (filters.page) queryParams.append('page', filters.page);
   if (filters.limit) queryParams.append('limit', filters.limit);
+  if (filters.current_user_roles) {
+    queryParams.append('current_user_roles', Array.isArray(filters.current_user_roles) ? filters.current_user_roles.join(',') : filters.current_user_roles);
+  }
   
   // Default to page 1, limit 100 if not provided
   if (!filters.page) queryParams.append('page', '1');
@@ -124,10 +127,10 @@ export const fetchLeaveRequests = async (userId, role = 'employee') => {
     
     // For regular employees, only show their own leave requests
     if (role !== 'admin' && role !== 'hr' && userId) {
-      endpoint = `/api/hr/leave-requests?employee_id=${encodeURIComponent(userId)}&page=1&limit=100`;
+      endpoint = `/api/hr/leave-requests?user_id=${encodeURIComponent(userId)}&role=${role}&page=1&limit=100`;
     } else {
       // For HR/Admin, show all leave requests
-      endpoint = `/api/hr/leave-requests?page=1&limit=100`;
+      endpoint = `/api/hr/leave-requests?role=${role}&page=1&limit=100`;
     }
     
     console.log('Fetching leave requests from endpoint:', endpoint);
@@ -286,7 +289,7 @@ export const changeUserPassword = async (passwordData) => {
 export const markAttendance = async (attendanceData) => {
   try {
     // First try the hr/attendance/checkin endpoint
-    const endpoint = `/api/hr/attendance/checkin`;
+    const endpoint = `/api/employees/attendance/checkin`;
     console.log('Attempting check-in with endpoint:', endpoint);
     console.log('Check-in data:', attendanceData);
     
@@ -343,7 +346,7 @@ export const editAttendanceRecord = async (recordId, updatedData) => {
 export const createManualAttendance = async (data) => {
   try {
     // Using the checkin endpoint which appears to be the correct one for creating attendance
-    const endpoint = `/api/hr/attendance/checkin`;
+    const endpoint = `/api/employees/attendance/checkin`;
     const result = await apiRequest(endpoint, {
       method: 'POST',
       body: JSON.stringify(data)
@@ -365,8 +368,8 @@ export const fetchDashboardStats = async (userId, role = 'employee') => {
   try {
     const isAdmin = role === 'admin' || role === 'hr';
     const endpoint = isAdmin 
-      ? `/api/hr/dashboard/stats` 
-      : `/api/hr/dashboard/employee/${userId}/stats`;
+      ? `/api/hr/dashboard` 
+      : `/api/hr/dashboard?user_id=${userId}&role=${role}`;
       
     const result = await apiRequest(endpoint);
     return result.data || result || {};

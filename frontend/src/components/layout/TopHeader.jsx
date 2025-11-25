@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { FaBell } from "react-icons/fa";
+
+const INACTIVITY_ALERTS_API = "http://localhost:3005/api/alerts/inactivity";
+const ANOMALY_ALERTS_API = "http://localhost:3005/api/alerts/anomaly/detect";
+const ASSIGNED_TASKS_API = "http://localhost:3005/api/tasks/assigned";
 
 const TopHeader = ({
   toggleSidebar,
   currentDateTime = "2025-06-04 12:58:26",
-  currentUser = "amit24ve",
   logout
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
@@ -19,61 +23,199 @@ const TopHeader = ({
   const [editProfileLoading, setEditProfileLoading] = useState(false);
   const [userId, setUserId] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [roleId, setRoleId] = useState(null);
+  const [username, setUsername] = useState("");
+  const [notifCount, setNotifCount] = useState(0);
+  const [jiggle, setJiggle] = useState(false);
   const dropdownRef = useRef(null);
   const profileBtnRef = useRef(null);
   const navigate = useNavigate();
+
+  // ---------- Notification Popup State ----------
+  const [showNotifCard, setShowNotifCard] = useState(false);
+  const notifBtnRef = useRef(null);
+
+  // Alert/task data
+  const [inactivityAlerts, setInactivityAlerts] = useState([]);
+  const [anomalyAlerts, setAnomalyAlerts] = useState([]);
+  const [assignedTasks, setAssignedTasks] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+
+  // Date range for anomaly API
+  const [dateParams, setDateParams] = useState({
+    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
+    end: new Date().toISOString().slice(0, 10),
+  });
+
+  // Fetch alerts for admin
+  const fetchAlerts = () => {
+    setAlertsLoading(true);
+    Promise.all([
+      fetch(INACTIVITY_ALERTS_API).then((res) => res.json()).catch(() => []),
+      fetch(`${ANOMALY_ALERTS_API}?start=${dateParams.start}&end=${dateParams.end}`).then((res) => res.json()).catch(() => []),
+    ])
+      .then(([ina, ano]) => {
+        const inaArr = Array.isArray(ina) ? ina : [];
+        const anoArr = Array.isArray(ano) ? ano : [];
+        setInactivityAlerts(inaArr);
+        setAnomalyAlerts(anoArr);
+        setNotifCount(inaArr.length + anoArr.length);
+        setAlertsLoading(false);
+      })
+      .catch(() => setAlertsLoading(false));
+  };
+
+  // Fetch tasks for HR or employee
+  const fetchAssignedTasks = () => {
+    setAlertsLoading(true);
+    const token = localStorage.getItem('access_token');
+    fetch(`${ASSIGNED_TASKS_API}?userId=${userId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+      .then(res => res.json())
+      .then(tasks => {
+        const tasksArr = Array.isArray(tasks) ? tasks : [];
+        setAssignedTasks(tasksArr);
+        setNotifCount(tasksArr.length);
+        setAlertsLoading(false);
+      })
+      .catch(() => setAlertsLoading(false));
+  }
+
+
+  // Formatting and sorting
+  const formatDate = (v) => (v ? v.split("T")[0] : "");
+  const mergedAlerts = [
+    ...inactivityAlerts.map((a) => ({
+      ...a,
+      type: "inactivity",
+      date: a.start || a.createdAt || "",
+    })),
+    ...anomalyAlerts.map((a) => ({
+      ...a,
+      type: "anomaly",
+      date: a.detected || a.createdAt || "",
+    })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const sortedTasks = assignedTasks
+    .map(t => ({
+      ...t,
+      date: t.due_date || t.created_at || "",
+    }))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  // --- Always check all 3: roleId, userRole, userId
+  useEffect(() => {
+    console.log('userId:', userId, 'roleId:', roleId, 'userRole:', userRole);
+    if (!userRole) return;
+    // For admin, userId not needed; for employee/hr, userId needed
+    if (userRole === 'admin') {
+      fetchAlerts();
+    } else if ((userRole === 'employee' || userRole === 'hr') && userId) {
+      fetchAssignedTasks();
+    }
+    // Interval logic
+    const t = setInterval(() => {
+      if (userRole === 'admin') {
+        fetchAlerts();
+      } else if ((userRole === 'employee' || userRole === 'hr') && userId) {
+        fetchAssignedTasks();
+      }
+    }, 60000);
+    return () => clearInterval(t);
+  }, [dateParams.start, dateParams.end, userRole, userId]);
+
+  useEffect(() => {
+    if (notifCount > 0) {
+      const interval = setInterval(() => {
+        setJiggle(true);
+        setTimeout(() => setJiggle(false), 4000);
+      }, 20000);
+      return () => clearInterval(interval);
+    }
+  }, [notifCount]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target) &&
-        (!profileBtnRef.current || !profileBtnRef.current.contains(event.target))
+        (!profileBtnRef.current || !profileBtnRef.current.contains(event.target)) &&
+        (!notifBtnRef.current || !notifBtnRef.current.contains(event.target))
       ) {
         setShowDropdown(false);
         setShowProfileCard(false);
+        setShowNotifCard(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Load user information for reminders
+  // Parse localStorage for ID, username, roleId
   useEffect(() => {
     try {
       const userData = localStorage.getItem('user');
       if (userData) {
         const user = JSON.parse(userData);
         setUserId(user.user_id || user.id);
-        setUserRole(user.role_name || user.role || 'user');
+        setUsername(user.full_name || user.username || "User");
+        let rid = null;
+        if (user.role_id) {
+          rid = user.role_id;
+        } else if (Array.isArray(user.roles) && user.roles.length > 0) {
+          rid = user.roles[0];
+        }
+        setRoleId(rid);
       }
     } catch (error) {
+      setUsername("User");
       console.error('Error parsing user data:', error);
     }
   }, []);
 
-  // NOTE: Do NOT call logout() immediately. Call it after showing modal.
+  // Looks up role name from API using roleId
+  useEffect(() => {
+    if (!roleId) return;
+    const fetchRoleName = async () => {
+      try {
+        const res = await fetch(`http://localhost:3005/api/roles/${roleId}`);
+        if (!res.ok) throw new Error('Failed to fetch role');
+        const data = await res.json();
+        if (data && data.role_name) {
+          setUserRole(data.role_name.toLowerCase());
+        } else if (data && data.name) {
+          setUserRole(data.name.toLowerCase());
+        } else {
+          setUserRole('user');
+        }
+      } catch (err) {
+        setUserRole('user');
+      }
+    };
+    fetchRoleName();
+  }, [roleId]);
+
   const handleLogout = (e) => {
     e.preventDefault();
     setShowDropdown(false);
-
     setShowLogoutModal(true);
     setTimeout(() => {
       setShowLogoutModal(false);
-
       if (logout) logout();
       navigate('/login', { replace: true });
     }, 1500);
   };
 
-  // Fetch user details from backend when profile card is opened
   const handleProfileClick = async (e) => {
     e.preventDefault();
     setShowDropdown(false);
     setProfileLoading(true);
     setProfileError("");
     setShowProfileCard(true);
-
     try {
       const token = localStorage.getItem("access_token");
       const res = await fetch("http://localhost:3005/api/auth/me", {
@@ -102,53 +244,141 @@ const TopHeader = ({
 
   const closeProfileCard = () => setShowProfileCard(false);
 
+  // Bell click handler
+  const handleNotifClick = (e) => {
+    e.preventDefault();
+    setShowNotifCard(!showNotifCard);
+    setShowDropdown(false);
+    setShowProfileCard(false);
+    // Refresh notifications on open
+    if (userRole === 'admin') {
+      fetchAlerts();
+    } else if ((userRole === 'employee' || userRole === 'hr') && userId) {
+      fetchAssignedTasks();
+    }
+  };
+
   return (
     <header className="bg-white border-b border-gray-200 py-3 px-4 md:px-6 flex justify-between items-center shadow-sm">
-      {/* Left section - Hamburger menu and search */}
+      {/* Left section - only hamburger menu */}
       <div className="flex items-center gap-3">
-        {/* Hamburger menu - visible on mobile, optional on desktop */}
-        <button 
-          className="text-gray-600 hover:text-gray-800"
-          onClick={() => toggleSidebar()}
-          aria-label="Toggle menu"
-        >
-          <i className="fas fa-bars text-xl"></i>
-        </button>
-        
-        <div className="relative flex-1 ml-2 sm:ml-5">
-          <div className="flex items-center bg-gray-100 rounded-md overflow-hidden">
-            <div className="pl-3 sm:pl-6 pr-2">
-              <i className="fas fa-search text-gray-400"></i>
-            </div>
-            <input 
-              type="text" 
-              placeholder="Search..." 
-              className="bg-transparent outline-none border-none py-2 px-2 sm:px-3 w-full text-sm"
-            />
-          </div>
-        </div>
+        <h1 className="text-3xl font-extrabold tracking-wide bg-gradient-to-r from-blue-500 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
+          CRM
+        </h1>
       </div>
-
       {/* Right section - User Profile */}
       <div className="flex items-center gap-2 md:gap-3">
-        
-        
+
+        {/* Notification Bell Button */}
+        <button
+          className="relative focus:outline-none mr-2 rounded-full p-2 hover:bg-blue-100 transition"
+          aria-label="Alerts & Notifications"
+          onClick={handleNotifClick}
+          ref={notifBtnRef}
+        >
+          <FaBell
+            className={`text-blue-500 ${notifCount > 0 && jiggle ? "bell-animate" : ""}`}
+            size={22}
+          />
+          {notifCount > 0 && (
+            <span className="absolute top-1 right-1 bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5 font-bold">
+              {notifCount}
+            </span>
+          )}
+        </button>
+
+        {/* NOTIFICATION POP CARD */}
+        {showNotifCard && (
+          <div
+            className="absolute z-50 right-2 mt-16 w-full max-w-xs sm:w-80 bg-white border border-blue-200 shadow-xl rounded-xl animate-fadeInNotif"
+            style={{
+              top: "1.3rem",
+              right: "3.0rem",
+              minWidth: "220px",
+              width: "90vw",
+              maxWidth: "280px"
+            }}
+          >
+            <div className="p-4 border-b border-blue-50 font-semibold text-lg text-blue-700 flex items-center">
+              <span className="mr-2"><FaBell className="inline" /></span>
+              Notifications
+            </div>
+            <div className="max-h-72 overflow-y-auto">
+              {alertsLoading ? (
+                <div className="p-4 text-gray-500 text-sm text-center">Loading...</div>
+              ) : (
+                userRole === 'admin' ? (
+                  mergedAlerts.length === 0 ? (
+                    <div className="p-4 text-gray-500 text-sm text-center">No notifications yet.</div>
+                  ) : (
+                    mergedAlerts.map((n, idx) => (
+                      <div key={n.id || idx} className="p-3 border-b bg-pink-100 last:border-none border-gray-300 flex flex-col gap-1">
+                        <span className="text-gray-900">
+                          {n.generator || n.site || n.device || "Alert"}
+                        </span>
+                        <span className="text-sm text-gray-700">
+                          {n.issue || n.anomaly || n.subject || "No description"}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {formatDate(n.date)}
+                        </span>
+                      </div>
+                    ))
+                  )
+                ) : (userRole === 'employee' || userRole === 'hr') ? (
+                  sortedTasks.length === 0 ? (
+                    <div className="p-4 text-gray-500 text-sm text-center">No assigned tasks yet.</div>
+                  ) : (
+                    sortedTasks.map((task, idx) => (
+                      <div key={task.id || idx} className="p-3 border-b bg-green-100 last:border-none border-gray-300 flex flex-col gap-1">
+                        <span className="text-gray-900">
+                          {task.title || "Task"}
+                        </span>
+                        <span className="text-sm text-gray-700">
+                          {task.site_name || task.description || "No description"}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {formatDate(task.due_date || task.created_at)}
+                        </span>
+                      </div>
+                    ))
+                  )
+                ) : (
+                  <div className="p-4 text-gray-500 text-sm text-center">No notifications available.</div>
+                )
+              )}
+            </div>
+            <div
+              className="px-3 py-2 bg-blue-50 rounded-b-xl text-sm text-blue-700 text-center cursor-pointer hover:bg-blue-100 w-full"
+              onClick={() => {
+                setShowNotifCard(false);
+                if (userRole === 'admin') {
+                  navigate('/alerts');
+                } else {
+                  navigate('/tasks');
+                }
+              }}
+              style={{ minWidth: '130px', width: '100%', zIndex: 60 }}
+            >
+              See all notifications
+            </div>
+          </div>
+        )}
+
         {/* User Profile Dropdown */}
         <div className="relative" ref={dropdownRef}>
-          <button 
+          <button
             className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 rounded-full px-2 py-1.5 md:px-3"
             onClick={() => setShowDropdown(!showDropdown)}
           >
             <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium text-sm">
-              {currentUser.slice(0, 2).toUpperCase()}
+              {username.slice(0, 2).toUpperCase()}
             </div>
-            <span className="font-medium hidden md:block">{currentUser}</span>
+            <span className="font-medium hidden md:block">{username}</span>
             <i className={`fas fa-chevron-down text-xs text-gray-500 hidden md:block ${showDropdown ? 'rotate-180' : ''}`}></i>
           </button>
-          
           {showDropdown && (
-          <div
-            className="
+            <div className="
               absolute
               right-2 sm:right-0
               mt-2
@@ -160,32 +390,28 @@ const TopHeader = ({
               border border-gray-100
               min-w-0 sm:min-w-[200px]
               px-1 sm:px-0
-            "
-          >
-            <div className="px-4 py-3 border-b border-gray-100">
-              <p className="text-sm font-medium text-gray-800">{currentUser}</p>
-          
-              <p className="text-xs text-gray-500 mt-1">{currentDateTime}</p>
+            ">
+              <div className="px-4 py-3 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-800">{username}</p>
+                <p className="text-xs text-gray-500 mt-1">{currentDateTime}</p>
+              </div>
+              <button
+                className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 text-sm w-full"
+                onClick={handleProfileClick}
+                title="Click to view current user profile"
+              >
+                <i className="fas fa-user w-5 text-gray-500"></i>
+                <span>View Profile</span>
+              </button>
+              <div className="border-t border-gray-100 my-1"></div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 text-sm text-red-600 w-full"
+              >
+                <i className="fas fa-sign-out-alt w-5"></i>
+                <span>Logout</span>
+              </button>
             </div>
-          
-            <button
-              className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 text-sm w-full"
-              onClick={handleProfileClick}
-              title="Click to view current user profile"
-            >
-              <i className="fas fa-user w-5 text-gray-500"></i>
-              <span>View Profile</span>
-            </button>
-  
-            <div className="border-t border-gray-100 my-1"></div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 text-sm text-red-600 w-full"
-            >
-              <i className="fas fa-sign-out-alt w-5"></i>
-              <span>Logout</span>
-            </button>
-          </div>
           )}
         </div>
       </div>
@@ -253,14 +479,11 @@ const TopHeader = ({
                   <h2 className="text-2xl font-bold mb-0.5 text-center capitalize">{userDetails.full_name || userDetails.username}</h2>
                   {userDetails.roles && userDetails.roles.length > 0 && (
                     <div className="flex flex-wrap gap-2 justify-center mb-3 mt-1">
-                      {userDetails.roles.map((role, i) => (
-                        <span
-                          key={i}
-                          className="bg-blue-50 text-blue-700 rounded px-2 py-0.5 text-xs font-semibold capitalize"
-                        >
-                          {typeof role === "string" ? role : role.name}
+                      {userDetails.roles && userDetails.roles.length > 0 && (
+                        <span className="role-badge">
+                          {userDetails.roles[0]}
                         </span>
-                      ))}
+                      )}
                     </div>
                   )}
                   <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mt-2">
@@ -270,10 +493,12 @@ const TopHeader = ({
                         <span className="text-gray-800 text-sm">{userDetails.email}</span>
                       </div>
                     )}
-                    {userDetails.id && (
+                    {userDetails.user_id && (
                       <div className="flex items-center gap-2">
                         <i className="fas fa-id-badge text-gray-400"></i>
-                        <span className="text-gray-800 text-sm">Employee ID: <b className="break-all">{userDetails.id}</b></span>
+                        <span className="text-gray-800 text-sm">
+                          User ID: <b className="break-all">{userDetails.user_id}</b>
+                        </span>
                       </div>
                     )}
                     {userDetails.created_at && (
@@ -427,6 +652,23 @@ const TopHeader = ({
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes bell-jiggle {
+          0%, 100% { transform: rotate(0deg);}
+          15% { transform: rotate(-17deg);}
+          35% { transform: rotate(15deg);}
+          55% { transform: rotate(-12deg);}
+          65% { transform: rotate(12deg);}
+          75% { transform: rotate(-7deg);}
+          85% { transform: rotate(7deg);}
+          95% { transform: rotate(-2deg);}
+        }
+        .bell-animate {
+          animation: bell-jiggle 1s cubic-bezier(.36,.07,.19,.97) both;
+          transform-origin: 50% 0%;
+        }
+      `}</style>
     </header>
   );
 };

@@ -7,7 +7,7 @@ import UserProfiles from './pages/UserProfiles';
 import RolesProfiles from './pages/RolesManagement';
 import CRMPage from './pages/CRMPage';
 import InventoryManagement from './pages/InventoryManagement';
-import TaskWorkflowManagement from './pages/TaskWorkflowManagement';
+import TaskView from './pages/TaskView';
 import DocumentManagement from './pages/DocumentManagement';
 import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
@@ -136,7 +136,7 @@ function App() {
             {/* <Route path="/hr/*" element={HRStaffModuleComplete /> } /> */}
             <Route path="/inventory/*" element={<InventoryManagement />} />
             {/* <Route path="/accounts/*" element={<AccountsFinance />} /> */}
-            <Route path="/tasks/*" element={<TaskWorkflowManagement />} />
+            <Route path="/tasks" element={<TaskView />} />
             <Route path="/documents/*" element={<DocumentManagement />} />
             <Route path="/employee/:id" element={<EmployeeDetail />} />
             <Route path="/hierarchy-assignment" element={<HierarchyAssignment />} />

@@ -255,10 +255,10 @@ export default function ClientDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 px-2 sm:px-4 lg:px-6 pb-8">
+    <div className="min-h-screen bg-gray-30 px-2 sm:px-4 lg:px-6 pb-8">
       {/* Dashboard Header with Period Selector at Top Right */}
       <div className="bg-white p-4 sm:p-5 rounded-xl border mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center">
-        <h3 className="text-lg sm:text-2xl font-bold text-gray-900 tracking-tight">Dashboard Overview</h3>
+        <h3 className="text-lg sm:text-2xl font-bold text-blue-800 tracking-tight">Dashboard Overview</h3>
         <select
           className="ml-2 border rounded px-3 py-1 text-xs bg-gray-100 text-blue-700 font-semibold"
           value={energyMode}
@@ -271,7 +271,7 @@ export default function ClientDashboard() {
       </div>
 
       {/* Dashboard Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-4 xl:grid-cols-4 gap-4 mb-8">
         {dashboardCards.map((stat) => (
           <div key={stat.title}
             className="bg-white rounded-2xl border p-5 flex flex-col justify-between"

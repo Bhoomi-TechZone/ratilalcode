@@ -5,8 +5,10 @@ import jwt
 from jwt.exceptions import PyJWTError
 from app.config import settings
 from app.utils.timezone_utils import get_ist_now
+from dotenv import load_dotenv
+load_dotenv()
 # Get environment variables or use defaults
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
+SECRET_KEY = os.getenv("SECRET_KEY")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 10080))  # 7 days
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 30))  # 30 days
 ALGORITHM = "HS256"

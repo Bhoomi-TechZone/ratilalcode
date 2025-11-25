@@ -8,8 +8,8 @@ const Breadcrumb = () => {
     switch(path) {
       case '/':
         return 'Dashboard';
-      case '/leads':
-        return 'Lead Management';
+      case '/Mannagement':
+        return 'Management';
       case '/quotations':
         return 'Quotations';
       case '/payments':

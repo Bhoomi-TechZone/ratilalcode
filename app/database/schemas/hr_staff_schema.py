@@ -72,24 +72,27 @@ class AttendanceModel(BaseModel):
     attendance_id: Optional[str] = Field(None, description="Unique ID for the attendance record")
     employee_id: str = Field(..., description="Employee/User ID for whom attendance is marked")
     attendance_date: date = Field(..., description="Date of attendance in YYYY-MM-DD format")
-    checkin_time: Optional[datetime] = Field(None, description="Check-in timestamp (ISO format)")
-    checkout_time: Optional[datetime] = Field(None, description="Check-out timestamp (ISO format)")
-    status: str = Field(..., description="Attendance status - present/absent/leave/late")
-    checkin_lat: Optional[float] = Field(None, description="Latitude for check-in location")
-    checkin_long: Optional[float] = Field(None, description="Longitude for check-in location")
-    checkin_location: Optional[str] = Field(None, description="Human-readable location/address for check-in")
-    checkout_lat: Optional[float] = Field(None, description="Latitude for check-out location")
-    checkout_long: Optional[float] = Field(None, description="Longitude for check-out location")
-    checkout_location: Optional[str] = Field(None, description="Human-readable location/address for check-out")
-    created_by: Optional[str] = Field(None, description="Who created/modified this record (employee/HR/admin)")
-    notes: Optional[str] = Field(None, description="Notes or manual override reasons")
-    is_manual: Optional[bool] = Field(False, description="True if this entry is a manual HR/admin override")
-    last_modified: Optional[datetime] = Field(None, description="Record last modified timestamp")
-    overtime_minutes: Optional[int] = Field(None, description="Overtime minutes worked (computed)")
-    late_minutes: Optional[int] = Field(None, description="Minutes late (computed by backend/report)")
+    checkin_time: Optional[datetime] = Field(None, description="Check-in timestamp (UTC, ISO format)")
+    checkin_timezone: Optional[str] = Field(None, description="Timezone for check-in")
+    checkout_time: Optional[datetime] = Field(None, description="Check-out timestamp (UTC, ISO format)")
+    checkout_timezone: Optional[str] = Field(None, description="Timezone for check-out")
+    status: str = Field(..., description="Attendance status: present/absent/leave/late")
+    location: Optional[dict] = Field(None, description="Geo + address (latitude, longitude, address)")
+    created_by: Optional[str] = Field(None, description="Who created this record (employee/HR/admin)")
+    updated_by: Optional[str] = Field(None, description="Who last updated this record")
+    notes: Optional[str] = Field(None, description="Notes or override reasons")
+    source: Optional[str] = Field("manual", description="Attendance source: manual/biometric/geo")
+    biometric_id: Optional[str] = Field(None, description="Biometric device ID or fingerprint hash")
+    device_id: Optional[str] = Field(None, description="Device ID used for check-in/out")
+    is_manual: Optional[bool] = Field(False, description="True if entry is from manual override")
+    last_modified: Optional[datetime] = Field(None, description="Record last modified at")
+    overtime_minutes: Optional[int] = Field(None, description="Computed overtime minutes")
+    late_minutes: Optional[int] = Field(None, description="Minutes late")
+    integration_type: Optional[str] = Field(None, description="Type of integration: API, device, etc.")
 
     class Config:
         orm_mode = True
+
 
 class AttendanceReportModel(BaseModel):
     employee_id: str

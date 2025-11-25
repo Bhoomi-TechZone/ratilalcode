@@ -5,12 +5,14 @@ import os
 import logging
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import Optional
+from dotenv import load_dotenv
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 # MongoDB connection settings
 MONGO_URI = os.getenv("mongodb+srv://errahulverma:NBscZYSOYG1P07qZ@vmax-cluster09.tqrpt4d.mongodb.net/")
-DB_NAME = os.getenv("DB_NAME", "crm_test")
+DB_NAME = os.getenv("DB_NAME")
 
 # Global async client and database
 _async_client: Optional[AsyncIOMotorClient] = None

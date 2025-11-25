@@ -25,7 +25,6 @@ from app.models.employee import (
 )
 
 
-
 # Initialize router
 employees_router = APIRouter(prefix="/api/employees", tags=["employees"])
 
@@ -44,12 +43,27 @@ def make_serializable(obj):
         return obj.isoformat()
     else:
         return obj
+    
+def validate_role_ids(role_ids, db):
+    valid_role_ids = set(r['id'] for r in db.roles.find({}, {'id': 1}))
+    for rid in role_ids:
+        if rid not in valid_role_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Role ID '{rid}' does not exist in roles collection"
+            )
 
 # Helper function to check HR permissions
 def has_hr_permission(user_roles: List[str]) -> bool:
-    """Check if user has HR permissions"""
-    hr_roles = ["hr", "admin", "hr_manager", "human_resources"]
-    return any(role.lower() in hr_roles for role in user_roles)
+    """Check if user has HR permissions (accepts role names, ids, or objects)"""
+    hr_roles = ["hr", "admin", "hr_manager", "human_resources", "administrator"]
+    normalized_roles = []
+    for role in user_roles:
+        if isinstance(role, dict) and "name" in role:
+            normalized_roles.append(role["name"].lower())
+        elif isinstance(role, str):
+            normalized_roles.append(role.lower())
+    return any(r in hr_roles for r in normalized_roles)
 
 
 # Helper function to check if user can manage leave requests (admin or HR roles)
@@ -853,54 +867,38 @@ async def create_employee(payload: Dict = Body(...)):
     """Create a new employee with comprehensive profile data in both users and employees collections"""
     try:
         db = get_database()
-        
-        # Ensure all roles in the database have proper ID fields
+        # Ensure all roles have proper ID fields
         fixed_roles = ensure_role_ids(db)
         if fixed_roles > 0:
             print(f"[DEBUG] Fixed {fixed_roles} roles without ID fields")
-        
-        # Debug: Print all fields from the payload to see what's being sent
         print(f"[DEBUG] CREATE EMPLOYEE - Received payload with fields: {list(payload.keys())}")
-        # Print role related fields for debugging
         print(f"[DEBUG] Role fields - role: {payload.get('role')}, roles: {payload.get('roles')}, role_ids: {payload.get('role_ids')}")
-        
-        # Required fields
+
         required_fields = ["email", "full_name", "password"]
         for field in required_fields:
             if not payload.get(field):
                 raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
-        
-        # Validate role/position if provided
-        # Handle both singular and plural forms (role and roles) for compatibility
         user_roles = payload.get("roles", [])
-        
-        # If frontend sent 'role' (singular), convert to 'roles' array format
         if not user_roles and "role" in payload:
             single_role = payload.get("role")
             if single_role:
                 if isinstance(single_role, str):
-                    # Simple role name
                     user_roles = [single_role]
-                    # Fetch role details from database if available
                     role_data = db.roles.find_one({"name": single_role.lower()})
                     if role_data:
                         print(f"[DEBUG] Found role details in database: {role_data}")
                 elif isinstance(single_role, dict):
-                    # The role is already an object with details
                     print(f"[DEBUG] Received role object: {single_role}")
                     if "name" in single_role:
                         user_roles = [single_role["name"]]
-                        # Fetch complete role details if only partial info is provided
-                        if "id" in single_role and not "permissions" in single_role:
-                            complete_role = db.roles.find_one({"id": single_role["id"]})
-                            if complete_role:
-                                single_role = complete_role
-                                print(f"[DEBUG] Enhanced role with complete details: {single_role}")
+                    if "id" in single_role and not "permissions" in single_role:
+                        complete_role = db.roles.find_one({"id": single_role["id"]})
+                        if complete_role:
+                            single_role = complete_role
+                            print(f"[DEBUG] Enhanced role with complete details: {single_role}")
                 print(f"[DEBUG] Converted singular role '{single_role}' to roles array: {user_roles}")
-        
+
         user_position = payload.get("position", "")
-        
-        # Determine primary role for employee
         primary_role = "employee"
         if user_roles:
             for role in user_roles:
@@ -910,62 +908,39 @@ async def create_employee(payload: Dict = Body(...)):
                     break
         elif user_position and is_valid_employee_role(user_position):
             primary_role = user_position.lower()
-        
-        # Generate unique IDs
         user_id = payload.get("user_id") or generate_user_id(db)
         emp_id = payload.get("emp_id") or generate_employee_id(db, primary_role)
-        
-        # Check if user already exists in either collection
         existing_user, existing_employee = check_user_exists(db, payload["email"], user_id, emp_id)
-        
         if existing_user and existing_employee:
-            # Both records exist with matching email - don't create
             raise HTTPException(status_code=400, detail="User already exists in both systems")
         elif existing_user and existing_user.get("email") == payload["email"]:
-            # User exists but check if employee record exists
             if existing_employee and existing_employee.get("email") == payload["email"]:
                 raise HTTPException(status_code=400, detail="User already exists in both systems")
-            # User exists but no employee record - create only employee record if criteria met
             user_record = existing_user
             create_user = False
             create_employee_record = should_create_employee_record(user_roles, user_position)
         elif existing_employee and existing_employee.get("email") == payload["email"]:
-            # Employee exists but no user record - create only user record
             employee_record = existing_employee
             create_user = True
             create_employee_record = False
         else:
-            # Neither exists - create both if employee criteria met
             create_user = True
             create_employee_record = should_create_employee_record(user_roles, user_position)
-        
-        # Import and use the AuthService for consistent password hashing
         from app.services.auth_service import AuthService
         auth_service = AuthService()
-        
-        # Hash password using the same method as in auth_service
         password_hash = auth_service.get_password_hash(payload["password"])
-        
-        # Log for debugging
         print(f"[DEBUG] Employee password hashing - Using AuthService method: {password_hash[:20]}...")
-        
-        # Prepare user data for users collection
+
         if create_user:
-            # Ensure we have both role_ids and roles with complete details
             role_ids = payload.get("role_ids", [])
-            role_objects = []  # Store complete role objects
-            
-            # Handle the case where role_ids is a single string
+            role_objects = []
             if isinstance(role_ids, str):
                 role_ids = [role_ids]
                 print(f"[DEBUG] Converted single role_id string to array: {role_ids}")
-            
-            # Check if we have full role objects in the payload
+
             if "role_objects" in payload and isinstance(payload["role_objects"], list):
                 role_objects = payload["role_objects"]
                 print(f"[DEBUG] Found complete role objects in payload: {role_objects}")
-                
-                # Extract role_ids and user_roles from role_objects
                 role_ids = []
                 user_roles = []
                 for role_obj in role_objects:
@@ -973,26 +948,18 @@ async def create_employee(payload: Dict = Body(...)):
                         role_ids.append(role_obj["id"])
                     if "name" in role_obj:
                         user_roles.append(role_obj["name"].lower())
-                
-                # Store/update all role objects in the database
                 for role_obj in role_objects:
                     if "id" in role_obj and "name" in role_obj:
                         existing_role = db.roles.find_one({"id": role_obj["id"]})
                         if existing_role:
-                            # Update existing role
-                            update_data = {
-                                "name": role_obj["name"],
-                                "updated_at": datetime.now()
-                            }
+                            update_data = {"name": role_obj["name"], "updated_at": datetime.now()}
                             if "description" in role_obj:
                                 update_data["description"] = role_obj["description"]
                             if "permissions" in role_obj:
                                 update_data["permissions"] = role_obj["permissions"]
-                                
                             db.roles.update_one({"id": role_obj["id"]}, {"$set": update_data})
                             print(f"[DEBUG] Updated existing role: {role_obj['id']}")
                         else:
-                            # Create new role
                             new_role = {
                                 "id": role_obj["id"],
                                 "name": role_obj["name"],
@@ -1003,57 +970,69 @@ async def create_employee(payload: Dict = Body(...)):
                             }
                             db.roles.insert_one(new_role)
                             print(f"[DEBUG] Created new role from object: {new_role}")
-            
-            # If we have role_ids but no roles, try to extract role names
+
             if role_ids and not user_roles:
-                # Try to fetch role info from database to get names
-                # Always use the "id" field, not "_id"
                 roles_info = list(db.roles.find({"id": {"$in": role_ids}}))
-                
                 if roles_info:
                     user_roles = [role.get("name", "").lower() for role in roles_info]
                     role_objects = roles_info
                     print(f"[DEBUG] Extracted role names from role_ids: {user_roles}")
                 else:
-                    # If no roles found, try to fix any roles that might be using _id instead of id
                     for role_id in role_ids:
                         role_info = db.roles.find_one({"_id": role_id})
                         if role_info:
-                            # This role is using _id instead of id, add the id field
                             if "name" in role_info:
                                 role_prefix = role_info["name"][:3].upper()
                                 new_id = f"{role_prefix}-{random.randint(100, 999)}"
-                                db.roles.update_one(
-                                    {"_id": role_id},
-                                    {"$set": {"id": new_id}}
-                                )
-                                # Add the name to user_roles
+                                db.roles.update_one({"_id": role_id}, {"$set": {"id": new_id}})
                                 user_roles.append(role_info.get("name", "").lower())
                                 role_objects.append(role_info)
                                 print(f"[DEBUG] Fixed role with missing id field: {new_id}")
-            
-            # If we have roles but no role_ids, try to find corresponding role_ids
             if user_roles and not role_ids:
-                # Try to fetch role IDs from role names
                 role_names_lower = [r.lower() if isinstance(r, str) else r.get("name", "").lower() for r in user_roles]
                 roles_info = list(db.roles.find({"name": {"$in": role_names_lower}}))
                 if roles_info:
-                    # Always use the "id" field, not "_id"
                     role_ids = []
                     for role in roles_info:
                         if "id" in role:
                             role_ids.append(role["id"])
                         else:
-                            # If no "id" field exists, create one with proper format
                             role_prefix = role.get("name", "role")[:3].upper()
                             new_id = f"{role_prefix}-{random.randint(100, 999)}"
-                            # Update the role with the new ID
-                            db.roles.update_one(
-                                {"_id": role["_id"]},
-                                {"$set": {"id": new_id}}
-                            )
+                            db.roles.update_one({"_id": role["_id"]}, {"$set": {"id": new_id}})
                             role_ids.append(new_id)
                     print(f"[DEBUG] Found role_ids from role names: {role_ids}")
+
+            # <<<<< INSERTED: VALIDATION FOR ROLE IDS BEFORE USER INSERT >>>>>
+            # If role ID does not exist, auto-create the role
+            try:
+                validate_role_ids(role_ids, db)
+            except HTTPException as ve:
+                # If role ID does not exist, create it
+                missing_ids = [rid for rid in role_ids if not db.roles.find_one({"id": rid})]
+                for rid in missing_ids:
+                    # Try to infer role name from payload or fallback
+                    role_name = payload.get("role", "employee")
+                    if isinstance(role_name, dict):
+                        role_name = role_name.get("name", "employee")
+                    role_name = role_name.lower()
+                    existing_role = db.roles.find_one({"name": role_name})
+                    if existing_role:
+                        # Use existing role's ID
+                        idx = role_ids.index(rid)
+                        role_ids[idx] = existing_role["id"]
+                    else:
+                        new_role = {
+                            "id": rid,
+                            "name": role_name,
+                            "description": f"Auto-created role for {role_name}",
+                            "permissions": [],
+                            "created_at": datetime.now(),
+                            "updated_at": datetime.now()
+                        }
+                        db.roles.insert_one(new_role)
+                # Re-validate after creation
+                validate_role_ids(role_ids, db)
             
             # If we still don't have role_ids but have a single role field
             if not role_ids and "role" in payload:
@@ -1267,10 +1246,12 @@ async def create_employee(payload: Dict = Body(...)):
         
         # Prepare employee data for employees collection
         if create_employee_record:
-            # Ensure role_ids is defined for employee record
             role_ids = payload.get("role_ids", [])
             if 'user_data' in locals() and user_data.get("role_ids"):
                 role_ids = user_data["role_ids"]
+
+            # <<<<< INSERTED: VALIDATION FOR ROLE IDS BEFORE EMPLOYEE INSERT >>>>>
+            validate_role_ids(role_ids, db)
             
             # Handle date fields
             # Handle both date_of_joining and doj fields (frontend may send either)
@@ -1374,7 +1355,6 @@ async def create_employee(payload: Dict = Body(...)):
             "created_user": create_user,
             "created_employee": create_employee_record
         }
-        
         message_parts = []
         if create_user:
             message_parts.append("User record created")
@@ -1382,17 +1362,20 @@ async def create_employee(payload: Dict = Body(...)):
             message_parts.append(f"Employee record created with role: {primary_role}")
         if not message_parts:
             message_parts.append("Records already exist and matched")
-        
+
         return make_serializable({
             "success": True,
             "message": " and ".join(message_parts),
             "data": response_data
         })
-        
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print("[ERROR] Exception in create_employee:", str(e))
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to create employee: {str(e)}")
+    
 
 @employees_router.put("/{employee_id}/deactivate", status_code=200)
 async def deactivate_employee(employee_id: str):
@@ -1424,8 +1407,16 @@ async def deactivate_employee(employee_id: str):
 # =================== ATTENDANCE MANAGEMENT ===================
 
 @employees_router.post("/attendance/checkin", status_code=201)
-async def checkin_attendance(payload: Dict = Body(...)):
-    """Check in/out attendance for an employee"""
+async def checkin_attendance(
+    payload: Dict = Body(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Mark attendance (check-in or check-out) for an employee.
+    - Employees can only mark their own attendance.
+    - HR/Admin can mark attendance for any user.
+    - Extensible for future biometric integration (source, biometric_id).
+    """
     try:
         db = get_database()
         user_id = payload.get("user_id")
@@ -1433,29 +1424,28 @@ async def checkin_attendance(payload: Dict = Body(...)):
         notes = payload.get("notes", "")
         latitude = payload.get("latitude")
         longitude = payload.get("longitude")
-        
+        source = payload.get("source", "manual")  # manual, biometric, geo, etc.
+        biometric_id = payload.get("biometric_id")  # For future biometric integration
         if not user_id:
             raise HTTPException(status_code=400, detail="user_id is required")
-        
+        # Authorization check: users can only checkin/checkout for themselves unless they're HR/Admin
+        user_roles = current_user.get("roles", [])
+        if isinstance(user_roles, str):
+            user_roles = [user_roles]
+        is_hr = has_hr_permission(user_roles)
+        current_user_id = current_user.get("user_id", current_user.get("employee_id"))
+        if not is_hr and user_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only mark attendance for yourself")
         # Verify user exists
         user = db.users.find_one({"user_id": user_id})
         if not user:
             raise HTTPException(status_code=404, detail="Employee not found")
-        
         today = datetime.now().strftime("%Y-%m-%d")
         current_time = datetime.now()
-        
-        # Check if already has record today
-        existing_record = db.attendance.find_one({
-            "user_id": user_id,
-            "date": today
-        })
-        
+        existing_record = db.attendance.find_one({"user_id": user_id, "date": today})
         if action == "checkin":
             if existing_record and existing_record.get("checkin_time"):
                 raise HTTPException(status_code=400, detail="Already checked in today")
-            
-            # Create or update checkin record
             attendance_record = {
                 "user_id": user_id,
                 "employee_name": user.get("full_name", user.get("username")),
@@ -1465,58 +1455,46 @@ async def checkin_attendance(payload: Dict = Body(...)):
                 "status": "present",
                 "working_hours": 0,
                 "notes": notes,
-                "location": {
-                    "latitude": latitude,
-                    "longitude": longitude
-                } if latitude and longitude else None,
+                "location": {"latitude": latitude, "longitude": longitude} if latitude and longitude else None,
                 "created_at": current_time,
-                "updated_at": current_time
+                "updated_at": current_time,
+                "marked_by": current_user.get("full_name", current_user.get("name", "Self")),
+                "source": source,
+                "biometric_id": biometric_id
             }
-            
             if existing_record:
-                db.attendance.update_one(
-                    {"user_id": user_id, "date": today},
-                    {"$set": attendance_record}
-                )
+                db.attendance.update_one({"user_id": user_id, "date": today}, {"$set": attendance_record})
             else:
                 db.attendance.insert_one(attendance_record)
-            
             message = "Checked in successfully"
-            
         elif action == "checkout":
             if not existing_record or not existing_record.get("checkin_time"):
                 raise HTTPException(status_code=400, detail="No checkin record found for today")
-            
             if existing_record.get("checkout_time"):
                 raise HTTPException(status_code=400, detail="Already checked out today")
-            
-            # Calculate working hours
             checkin_time = existing_record["checkin_time"]
             if isinstance(checkin_time, str):
                 checkin_time = datetime.fromisoformat(checkin_time.replace('Z', '+00:00'))
-            
             working_hours = (current_time - checkin_time).total_seconds() / 3600
-            
-            # Update checkout
             db.attendance.update_one(
                 {"user_id": user_id, "date": today},
                 {"$set": {
                     "checkout_time": current_time,
                     "working_hours": round(working_hours, 2),
                     "notes": notes,
-                    "updated_at": current_time
+                    "updated_at": current_time,
+                    "marked_by": current_user.get("full_name", current_user.get("name", "Self")),
+                    "source": source,
+                    "biometric_id": biometric_id
                 }}
             )
-            
             message = "Checked out successfully"
-        
         return {
             "success": True,
             "message": message,
             "timestamp": current_time,
             "working_hours": round(working_hours, 2) if action == "checkout" else 0
         }
-        
     except HTTPException:
         raise
     except Exception as e:

@@ -104,9 +104,11 @@ class UserRepository:
 
     def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         try:
+            logger.info(f"Looking up user by user_id: {user_id}")
             user = self.collection.find_one({"user_id": user_id})
             if not user and ObjectId.is_valid(user_id):
                 user = self.collection.find_one({"_id": ObjectId(user_id)})
+            logger.info(f"get_user_by_id result: {user}")
             if user:
                 user = convert_objectid_to_string(user)
                 if "created_at" not in user:

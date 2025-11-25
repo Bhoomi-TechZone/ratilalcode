@@ -7,7 +7,11 @@ from bson import ObjectId
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # Set up logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # MongoDB connection settings
@@ -15,7 +19,7 @@ MONGO_URI = os.getenv("DATABASE_URL", "mongodb+srv://errahulverma:NBscZYSOYG1P07
 DB_NAME = os.getenv("DB_NAME", "crm_test")
 _client = None  # Global MongoDB client
 
-CURRENT_TIMESTAMP = "2025-06-05 12:42:20"
+CURRENT_TIMESTAMP = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # Always current time
 
 def get_database():
     """Get MongoDB database connection with connection pooling"""
@@ -112,7 +116,7 @@ def find_user_by_id_or_user_id(identifier: str):
             user = collection.find_one({"_id": object_id})
             if user:
                 return user
-        except:
+        except Exception:
             pass
         user = collection.find_one({"user_id": identifier})
         if user:
@@ -171,7 +175,7 @@ def safe_create_index(collection, keys, **kwargs):
             return False
 
 def initialize_db():
-    """Initialize database connection and setup."""
+    """Initialize database connection and setup, seed all key roles."""
     try:
         client.server_info()
         logger.info(f"Connected to MongoDB: {MONGO_URI}")
@@ -189,20 +193,23 @@ def create_indexes():
     safe_create_index(users_collection(), [("username", ASCENDING)], unique=True)
     safe_create_index(users_collection(), [("email", ASCENDING)], unique=True)
     safe_create_index(roles_collection, [("name", ASCENDING)], unique=True)
+    safe_create_index(tasks_collection(), [("id", ASCENDING)], unique=True)
+    safe_create_index(db.counters, [("_id", ASCENDING)], unique=True)
 
 def initialize_default_data():
-    """Initialize default data in the database with custom incremental Ro-XXX ids."""
+    """Initialize default data in the database with custom incremental Ro-XXX ids and key roles."""
     logger.info("Initializing default data")
     default_roles = [
         {"name": "admin", "description": "System administrator with full access"},
         {"name": "employee", "description": "Company employee"},
         {"name": "hr", "description": "HR team member"},
-        {"name": "user", "description": "General user"},
+        {"name": "manager", "description": "Team manager"},
+        {"name": "user", "description": "General user"}
     ]
     for role in default_roles:
         existing_role = roles_collection.find_one({"name": role["name"]})
         if not existing_role:
-            role_id = get_next_role_id(db)  # Custom incremental Ro-XXX id
+            role_id = get_next_role_id(db)
             role_doc = role.copy()
             role_doc["id"] = role_id
             role_doc["created_at"] = datetime.now()
@@ -212,7 +219,6 @@ def initialize_default_data():
         else:
             # If already exists but does not have Ro-XXX id, assign one (migration)
             if not existing_role.get("id") or str(existing_role["id"]).startswith("691f"):
-                # Find max Ro-XXX in collection
                 max_existing = list(db.roles.aggregate([
                     {"$match": {"id": {"$regex": "^Ro-\\d{3}$"}}},
                     {"$project": {"num": {"$toInt": {"$substr": ["$id", 3, 3]}}}},
@@ -243,7 +249,7 @@ def assign_admin_role(username):
             "username": username,
             "email": f"{username}@crm.com",
             "created_at": datetime.now(),
-            "role_ids": [admin_role_id],  # Use custom Ro-XXX id
+            "role_ids": [admin_role_id],
             "is_active": True
         })
         logger.info(f"Created user {username} with admin role")
@@ -277,7 +283,7 @@ def get_object_id(id_str):
     """Convert string ID to ObjectId."""
     try:
         return ObjectId(id_str)
-    except:
+    except Exception:
         return None
 
 try:

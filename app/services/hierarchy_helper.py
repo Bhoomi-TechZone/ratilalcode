@@ -86,7 +86,7 @@ class HierarchyHelper:
         """
         try:
             # Get user and their roles
-            from app.routes.assigned_leads import get_user_role_hierarchy
+            from app.routes import get_user_role_hierarchy
             user, user_roles = get_user_role_hierarchy(db, user_id)
             
             if not user_roles:

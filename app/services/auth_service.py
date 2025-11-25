@@ -1,258 +1,176 @@
-import os, jwt
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any
-from fastapi import HTTPException, status, Depends, Header, Request
+from fastapi import HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
+from app.config import settings
 from app.database.repositories.user_repository import UserRepository
 from app.database.repositories.role_repository import RoleRepository
 from app.utils.timezone_utils import get_ist_now, get_ist_timestamp, get_ist_timestamp_for_db
+import jwt
 
-# OAuth2 scheme for token extraction
+logger = logging.getLogger(__name__)
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-# Get environment variables or use defaults
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # Default to 1 day
-REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+SALT = getattr(settings, "PASSWORD_SALT", "some_salt_value_here")
 
-# Define SECRET_KEY and ALGORITHM directly here to avoid import errors
-SECRET_KEY = os.getenv("SECRET_KEY", "your_secret_key")  # Gets the same value as in config.py
-ALGORITHM = "HS256"
-
-# Print for debugging
-print(f"[DEBUG] AuthService using SECRET_KEY: {SECRET_KEY[:5]}...")
-
-# Password salt - should be kept secret
-SALT = os.getenv("PASSWORD_SALT", "some_salt_value_here")
-
-# Function to hash a password using SHA-256
 def get_password_hash(password: str) -> str:
-    """Generate a hashed password using HMAC-SHA256"""
+    """Generate a hashed password using HMAC-SHA256 (JWT used as example). In production: use passlib or bcrypt!"""
     try:
-        # Use the same SECRET_KEY as your JWT to maintain consistency
         hashed = jwt.encode({"password": password}, SECRET_KEY, algorithm=ALGORITHM)
-        print(f"[DEBUG] Password hashed successfully: {hashed[:20]}...")
+        logger.debug("Password hashed successfully")
         return hashed
     except Exception as e:
-        print(f"[ERROR] Password hashing error: {str(e)}")
-        # Return a fallback hash for development
-        return f"password_hash_{password}"
+        logger.error(f"Password hashing error: {str(e)}")
+        # Don't return insecure fallback in production
+        raise HTTPException(status_code=500, detail="Password hashing failed")
 
-# Function to verify password
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against a stored JWT hash"""
-    # Create a hash of the provided password
-    new_hash = get_password_hash(plain_password)
-    # Log for debugging
-    print(f"[DEBUG] Verifying password - Plain password: {plain_password[:1]}**** New hash: {new_hash[:20]}... Stored hash: {hashed_password[:20]}...")
-    # Compare with stored hash
-    return new_hash == hashed_password
-
+    """Verify a password against a stored hash"""
+    try:
+        new_hash = get_password_hash(plain_password)
+        logger.debug("Password verification attempted")
+        return new_hash == hashed_password
+    except Exception as e:
+        logger.error(f"Password verification error: {str(e)}")
+        return False
 
 class AuthService:
     def __init__(self):
         self.user_repo = UserRepository()
         self.role_repo = RoleRepository()
-        
         self.SECRET_KEY = SECRET_KEY
         self.ALGORITHM = ALGORITHM
         self.ACCESS_TOKEN_EXPIRE_MINUTES = ACCESS_TOKEN_EXPIRE_MINUTES
         self.REFRESH_TOKEN_EXPIRE_DAYS = REFRESH_TOKEN_EXPIRE_DAYS
-    
-    # Use the function defined outside the class
+
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against a hash"""
-        # Enhanced debugging
-        print(f"[{get_ist_timestamp()}] Password verification attempt")
-        print(f"[DEBUG] Plain password length: {len(plain_password)}")
-        print(f"[DEBUG] Hashed password format: {hashed_password[:10]}... (length: {len(hashed_password)})")
-        
-        # Try multiple verification methods
         try:
-            # Method 1: Direct JWT verification using function above
-            if hashed_password.count('.') == 2:  # Simple JWT format check
-                jwt_verified = verify_password(plain_password, hashed_password)
-                print(f"[DEBUG] JWT verification result: {jwt_verified}")
-                if jwt_verified:
-                    return True
-            
-            # Method 2: Direct comparison (for plain text passwords in dev/test)
-            if plain_password == hashed_password:
-                print(f"[DEBUG] Direct comparison match - THIS IS INSECURE")
-                return True
-            
-            # Method 3: Try direct comparison with the stored hash (legacy)
+            # Method 1: JWT format check
+            if hashed_password.count('.') == 2:
+                return verify_password(plain_password, hashed_password)
+            # Method 2: Insecure test fallback removed for production
             new_hash = get_password_hash(plain_password)
-            direct_match = new_hash == hashed_password
-            print(f"[DEBUG] Direct hash comparison: {direct_match}")
-            if direct_match:
+            if new_hash == hashed_password:
                 return True
-                
-            # For development/testing: Accept any password for specific test accounts
-            test_accounts = ["admin", "demo", "test"]
-            if plain_password and (plain_password == "admin123" or plain_password == "password") and any(name in hashed_password.lower() for name in test_accounts):
-                print(f"[DEBUG] Test account accepted with default password")
-                return True
-                
-            # If none of the methods worked, log and return False
-            print(f"[{get_ist_timestamp()}] All password verification methods failed")
+            logger.warning("Password verification failed for user.")
             return False
-            
         except Exception as e:
-            print(f"[{get_ist_timestamp()}] Password verification error: {str(e)}")
-            # For debugging only - REMOVE IN PRODUCTION:
-            print(f"[DEBUG] Allowing login despite error for testing")
-            return True
-    
-    # Use the function defined outside the class 
+            logger.error(f"Password verification error: {str(e)}")
+            return False
+
     def get_password_hash(self, password: str) -> str:
-        """Get JWT-based password hash"""
         return get_password_hash(password)
-    
-    # FIX: Modified create_access_token to use direct SECRET_KEY
+
     def create_access_token(self, data: dict) -> str:
-        """Create access token with extended expiration time"""
+        """Create access token with expiration."""
         to_encode = data.copy()
-        
-        # Use 7 days for token expiration with IST time
-        expire = get_ist_now() + timedelta(days=7)
+        expire = get_ist_now() + timedelta(minutes=self.ACCESS_TOKEN_EXPIRE_MINUTES)
         to_encode.update({"exp": expire})
-        
-        # Create JWT token using direct SECRET_KEY instead of settings.SECRET_KEY
         try:
-            encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-            print(f"[DEBUG] Access token created successfully")
+            encoded_jwt = jwt.encode(to_encode, self.SECRET_KEY, algorithm=self.ALGORITHM)
+            logger.info("Access token created successfully")
             return encoded_jwt
         except Exception as e:
-            print(f"[ERROR] Token creation error: {str(e)}")
-            raise e
-    
-    # FIX: Modified create_refresh_token to use direct SECRET_KEY
+            logger.error(f"Token creation error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error creating access token")
+
     def create_refresh_token(self, data: dict) -> str:
-        """Create refresh token with extended expiration time"""
+        """Create refresh token with expiration."""
         to_encode = data.copy()
-        
-        # Use 30 days for refresh token with IST time
-        expire = get_ist_now() + timedelta(days=30)
+        expire = get_ist_now() + timedelta(days=self.REFRESH_TOKEN_EXPIRE_DAYS)
         to_encode.update({"exp": expire})
-        
-        # Create JWT token using direct SECRET_KEY instead of settings.SECRET_KEY
         try:
-            encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-            print(f"[DEBUG] Refresh token created successfully")
+            encoded_jwt = jwt.encode(to_encode, self.SECRET_KEY, algorithm=self.ALGORITHM)
+            logger.info("Refresh token created successfully")
             return encoded_jwt
         except Exception as e:
-            print(f"[ERROR] Token creation error: {str(e)}")
-            raise e
+            logger.error(f"Refresh token creation error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error creating refresh token")
 
     @staticmethod
     def verify_token(token: str) -> dict:
-        """Verify token using the secret key"""
         try:
-            print(f"[DEBUG] Trying to verify token with SECRET_KEY...")
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            print(f"[DEBUG] Successfully verified token for user: {payload.get('username', 'unknown')}")
+            logger.info("Token verified successfully")
             return payload
         except jwt.ExpiredSignatureError:
-            print("[ERROR] Token has expired")
-            raise ValueError("Token has expired")
+            logger.error("Token has expired")
+            raise HTTPException(status_code=401, detail="Token has expired")
         except jwt.InvalidTokenError as e:
-            print(f"[ERROR] Invalid token: {str(e)}")
-            raise ValueError(f"Invalid token: {str(e)}")
+            logger.error(f"Invalid token: {str(e)}")
+            raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
         except Exception as e:
-            print(f"[ERROR] Token verification error: {str(e)}")
-            raise ValueError(f"Token verification failed: {str(e)}")
-        
+            logger.error(f"Token verification error: {str(e)}")
+            raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
+
     @staticmethod
     async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
-        """Get current user from token"""
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
         try:
-            # Decode the token
+            logger.info(f"Token received: {token}")
             payload = AuthService.verify_token(token)
-            
-            # Get user identifier - try different possible fields
+            logger.info(f"Decoded JWT payload: {payload}")
             user_identifier = payload.get("sub") or payload.get("user_id") or payload.get("username")
+            logger.info(f"User identifier extracted: {user_identifier}")
             if user_identifier is None:
-                print("[ERROR] No user identifier found in token")
+                logger.error("No user identifier found in token")
                 raise credentials_exception
-            
-            # Get user from database - try by ID first, then username
             user_repo = UserRepository()
             user = user_repo.get_user_by_id(user_identifier)
-            
+            logger.info(f"User fetched by user_id: {user}")
             if user is None:
-                # If not found by ID, try by username
                 user = user_repo.get_user_by_username(user_identifier)
-            
+                logger.info(f"User fetched by username: {user}")
             if user is None:
-                print(f"[ERROR] User not found with identifier: {user_identifier}")
+                logger.error(f"User not found with identifier: {user_identifier}")
                 raise credentials_exception
-            
-            # Check if user is active
             if not user.get("is_active", True):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Inactive user",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-            
-            # Add token data to user
+                raise HTTPException(status_code=401, detail="Inactive user")
             user["token_data"] = payload
-            
-            print(f"[DEBUG] Successfully authenticated user: {user.get('username')}")
+            logger.info(f"Authenticated user: {user.get('username')}")
             return user
-            
         except HTTPException:
             raise
         except Exception as e:
-            print(f"[{get_ist_timestamp()}] Authentication error: {str(e)}")
+            logger.error(f"Authentication error: {str(e)}")
             raise credentials_exception
 
     async def admin_required(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-        """Temporary bypass of admin check - REMOVE IN PRODUCTION"""
-        print(f"[WARNING] ADMIN CHECK BYPASSED for user {current_user.get('username')} - DEVELOPMENT ONLY!")
+        # In production: uncomment this permission check
+        if "admin" not in (current_user.get("roles") or []):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions"
+            )
+        logger.info(f"Admin access granted to user {current_user.get('username')}")
         return current_user
 
-    
     def register_user(self, username, email, password, full_name, phone=None, department=None, role_ids=None, reporting_user_id=None):
-        """Register a new user"""
-        # Check if username already exists
         if self.user_repo.get_user_by_username(username):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already registered"
-            )
-
-        # Check if email already exists
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already registered")
         if self.user_repo.get_user_by_email(email):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered"
-            )
-
-        # Generate unique user_id
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
         import random
         while True:
             user_id = f"USR-{random.randint(100, 999)}"
-            if not self.user_repo.get_user_by_id(user_id):  # This method already handles user_id field
+            if not self.user_repo.get_user_by_id(user_id):
                 break
-
-        # Hash the password
         hashed_password = self.get_password_hash(password)
-
-        # If role_ids is None or empty, assign the default "user" role
         if not role_ids:
             default_role = self.role_repo.get_role_by_name("user")
             role_ids = [default_role["id"]] if default_role else []
-
-        # Prepare user data
         user_dict = {
-            "user_id": user_id,  # Add the generated user_id
+            "user_id": user_id,
             "username": username,
             "email": email,
             "password": hashed_password,
@@ -262,116 +180,75 @@ class AuthService:
             "is_active": True,
             "created_at": get_ist_timestamp_for_db(),
             "updated_at": get_ist_timestamp_for_db(),
-            "role_ids": role_ids,  # always a list of IDs
-            "reporting_user_id": reporting_user_id  # Store the reporting user ID
+            "role_ids": role_ids,
+            "reporting_user_id": reporting_user_id
         }
-
-        # Create the user
         new_user = self.user_repo.create_user(user_dict)
-
         if not new_user:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create user"
-            )
-
-        # Get role names for response
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create user")
         roles = self.role_repo.get_roles_by_ids(role_ids)
-        
-        # Format roles as list of dictionaries for UserResponse schema
-        role_dicts = []
-        for role in roles:
-            if role:
-                role_dicts.append({
-                    "id": role.get("id", "unknown"),
-                    "name": role.get("name", "unknown")
-                })
-        
-        # Ensure role_dicts is always a list
-        if not isinstance(role_dicts, list):
-            role_dicts = []
-
-        # Handle reporting hierarchy if reporting_user_id is provided
+        role_dicts = [{"id": r.get("id", "unknown"), "name": r.get("name", "unknown")} for r in roles if r]
         if reporting_user_id:
             try:
-                # Import here to avoid circular imports
                 from app.services.user_hierarchy_service import UserHierarchyService
                 import asyncio
-                
-                # Create hierarchy entry asynchronously
                 loop = asyncio.get_event_loop()
-                loop.run_until_complete(
-                    UserHierarchyService.create_hierarchy(new_user["id"], reporting_user_id)
-                )
+                loop.run_until_complete(UserHierarchyService.create_hierarchy(new_user["id"], reporting_user_id))
             except Exception as e:
-                print(f"[{get_ist_timestamp()}] Warning: Failed to create hierarchy: {str(e)}")
-                # Don't fail user creation if hierarchy creation fails
-                pass
-            
-        # Prepare response with all required UserResponse fields
+                logger.warning(f"Failed to create hierarchy: {str(e)}")
         response = {
-            "id": str(new_user["id"]),  # Ensure id is always a string
+            "id": str(new_user["id"]),
             "username": new_user["username"],
             "email": new_user["email"],
             "full_name": new_user.get("full_name", ""),
             "phone": new_user.get("phone"),
             "department": new_user.get("department"),
-            "roles": role_dicts,  # This should be a list of dictionaries
+            "roles": role_dicts,
             "is_active": new_user.get("is_active", True),
             "created_at": new_user["created_at"],
-            "updated_at": new_user.get("updated_at", new_user["created_at"]),  # Use created_at as fallback
+            "updated_at": new_user.get("updated_at", new_user["created_at"]),
         }
-        
-        # Debug: Print the response to help with troubleshooting
-        print(f"[{get_ist_timestamp()}] Registration response: {response}")
-
+        logger.info(f"Registration response: {response}")
         return response
-        
-    # The rest of your methods remain unchanged...
+
     def refresh_token(self, refresh_token: str) -> Dict[str, Any]:
-        # Keep existing implementation
-        pass
-        
+        logger.warning("refresh_token endpoint not yet implemented.")
+        raise HTTPException(status_code=501, detail="Not implemented")
+
     def get_user_info(self, user_id: str) -> Dict[str, Any]:
-        # Keep existing implementation
-        pass
-        
-    def change_password(self, user_id: str, old_password: str, new_password: str) -> bool:
-        """Change a user's password after verifying the old password"""
-        # Get the user
+        # Implementation for /me endpoint and profile fetch
         user = self.user_repo.get_user_by_id(user_id)
         if not user:
-            print(f"[ERROR] User not found with ID: {user_id}")
+            # Fallback: try username (legacy)/id
+            user = self.user_repo.get_user_by_username(user_id)
+        if not user:
+            logger.error(f"User not found in get_user_info: {user_id}")
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
+
+    def change_password(self, user_id: str, old_password: str, new_password: str) -> bool:
+        user = self.user_repo.get_user_by_id(user_id)
+        if not user:
+            logger.error(f"User not found with ID: {user_id}")
             raise ValueError("User not found")
-        
-        # Determine password field name - check various possible names
         password_field = None
         for field in ["password", "hashed_password", "hashedPassword", "hash_password"]:
             if field in user and user[field]:
                 password_field = field
                 break
-                
         if not password_field:
-            print(f"[ERROR] No password field found for user: {user_id}")
+            logger.error(f"No password field found for user: {user_id}")
             raise ValueError("User record is missing password field")
-        
-        # Verify old password
         if not self.verify_password(old_password, user[password_field]):
-            print(f"[ERROR] Invalid old password for user: {user_id}")
+            logger.warning(f"Invalid old password for user: {user_id}")
             raise ValueError("Invalid old password")
-        
-        # Hash new password
         new_password_hash = self.get_password_hash(new_password)
-        
-        # Update password in database
         result = self.user_repo.update_user_by_id(
             user_id, 
             {"password": new_password_hash, "updated_at": get_ist_timestamp_for_db()}
         )
-        
         if not result:
-            print(f"[ERROR] Failed to update password for user: {user_id}")
+            logger.error(f"Failed to update password for user: {user_id}")
             raise ValueError("Failed to update password")
-            
-        print(f"[INFO] Password successfully changed for user: {user_id}")
+        logger.info(f"Password successfully changed for user: {user_id}")
         return True

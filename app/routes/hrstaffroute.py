@@ -6,10 +6,9 @@ from bson import ObjectId
 import json
 import logging
 
-from ..core.security import get_current_user
-from ..config import settings
+from app.services.auth_service import AuthService
+get_current_user = AuthService.get_current_user
 from ..database import get_database
-
 
 # Set up logger
 logger = logging.getLogger(__name__)
