@@ -37,8 +37,11 @@ app = FastAPI(
 
 # CORS configuration
 origins = [
+    # 1. Primary Live Frontend URL
     "https://ratilalandsons.onrender.com",
-    "https://ratilalandsonscrm.onrender.com" # main frontend
+    "https://ratilalandsonscrm.onrender.com",
+
+    # 2. Other FrontendLocal URLs for development and testing
     "http://localhost:4000",
     "http://127.0.0.1:4000",
     "http://localhost:3000",
