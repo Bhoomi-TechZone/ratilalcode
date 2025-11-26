@@ -5,7 +5,7 @@ import AttendanceManagement from './AttendanceManagement';
 import LeaveManagement from './LeaveManagement';
 import EmployeeManagement from './EmployeeManagement';
 
-const API_BASE_URL = 'http://localhost:3005';
+const API_BASE_URL = 'https://ratilalandsonscrm.onrender.com';
 
 const DashboardContainer = () => {
   // State Management
@@ -392,55 +392,6 @@ const DashboardContainer = () => {
   
   return (
     <div className="bg-gray-50 min-h-screen">
-      {/* Navigation Header */}
-      <div className="bg-white shadow-sm">
-        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center space-x-4">
-            <div className="text-xl font-bold text-blue-600">CRM</div>
-            <nav className="hidden md:flex space-x-1">
-              <button 
-                onClick={() => setActiveTab('dashboard')}
-                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'dashboard' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
-              >
-                Dashboard
-              </button>
-              
-              <button 
-                onClick={() => setActiveTab('attendance')}
-                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'attendance' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
-              >
-                Attendance
-              </button>
-              
-              <button 
-                onClick={() => setActiveTab('leaves')}
-                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'leaves' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
-              >
-                Leave Management
-              </button>
-              
-              {(isAdmin || isHR) && (
-                <button 
-                  onClick={() => setActiveTab('employees')}
-                  className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'employees' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
-                >
-                  Employees
-                </button>
-              )}
-            </nav>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <div className="text-sm text-gray-700">
-              {currentUser.full_name || currentUser.name || currentUser.username}
-            </div>
-            <div className="h-8 w-8 rounded-full bg-blue-200 flex items-center justify-center text-blue-600 font-medium">
-              {(currentUser.full_name || currentUser.name || currentUser.username || 'U').charAt(0).toUpperCase()}
-            </div>
-          </div>
-        </div>
-      </div>
-      
       {/* Content Area */}
       <div className="container mx-auto p-4">
         {/* Dashboard Tab */}

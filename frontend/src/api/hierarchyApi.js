@@ -5,7 +5,7 @@ import axios from 'axios';
 const API_URL = import.meta.env.VITE_API_URL || 
                 (window.location.hostname === 'test.soheru.me' ? 
                 'https://localhost:8004/api' : 
-                'http://localhost:3005/api');
+                'https://ratilalandsonscrm.onrender.com/api');
 
 // Debug helper function to check auth status
 const checkAuthStatus = () => {

@@ -258,7 +258,7 @@ function Modal({ open, onClose, status, message }) {
 }
 
 // ---- Main Component ----
-const API_BASE = "http://localhost:3005/api/staff/";
+const API_BASE = "https://ratilalandsonscrm.onrender.com/api/staff/";
 
 const LeaveRequestCard = ({ onBackToLeaveTab }) => {
   const [leaveRequests, setLeaveRequests] = useState([]);

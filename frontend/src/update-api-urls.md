@@ -6,17 +6,17 @@ import { AUTH_API, LEAD_API, USER_API, ROLE_API, FOLLOWUP_API, ASSIGNED_LEADS_AP
 // 2. Replace hardcoded URLs with the imported constants:
 
 // Instead of:
-// fetch("http://localhost:3005/api/auth/login", {...})
+// fetch("https://ratilalandsonscrm.onrender.com/api/auth/login", {...})
 // Use:
 // fetch(AUTH_API.LOGIN, {...})
 
 // Instead of:
-// const API_BASE_URL = 'http://localhost:3005/api/lead';
+// const API_BASE_URL = 'https://ratilalandsonscrm.onrender.com/api/lead';
 // Use:
 // const API_BASE_URL = LEAD_API.BASE;
 
 // Instead of:
-// axios.get('http://localhost:3005/api/roles/', {...})
+// axios.get('https://ratilalandsonscrm.onrender.com/api/roles/', {...})
 // Use:
 // axios.get(ROLE_API.ROLES, {...})
 

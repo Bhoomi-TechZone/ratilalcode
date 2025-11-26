@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 import { Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, UserCheck } from "lucide-react";
 
-const API_BASE_URL = "http://localhost:3005";
+const API_BASE_URL = "https://ratilalandsonscrm.onrender.com";
 
 const UserAttendanceView = () => {
   const [activeTab, setActiveTab] = useState("manual");

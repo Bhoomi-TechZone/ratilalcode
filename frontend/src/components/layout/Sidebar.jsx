@@ -25,7 +25,7 @@ const menuItems = [
   {
     icon: 'user-tie', label: 'HR & Staff', path: '/hr/staff',
     submenu: [
-      { label: 'Mark Attendance', path: '/attendance', permission: ['attendance:read', 'attendance:manage'] },
+      { label: 'Mark Attendance', path: '/attendance', permission: ['hr:manage', 'attendance:read', 'attendance:manage'] },
       { label: 'Staff Management', path: '/hr', permission: 'hr:manage' },
     ]
   },

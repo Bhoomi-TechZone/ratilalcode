@@ -84,7 +84,7 @@ const HierarchyAssignment = () => {
         dateRange: ''
     });
 
-    const API_BASE_URL = 'http://localhost:3005';
+    const API_BASE_URL = 'https://ratilalandsonscrm.onrender.com';
 
     useEffect(() => {
         const user = getCurrentUser();

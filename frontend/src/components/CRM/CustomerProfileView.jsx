@@ -12,7 +12,7 @@ async function getCommunicationLogs(customer_id) {
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 
-const API_BASE = "http://localhost:3005/api/customers";
+const API_BASE = "https://ratilalandsonscrm.onrender.com/api/customers";
 const sectionCard =
   "bg-gray-100 rounded-xl shadow border p-5 mb-4 flex flex-col gap-5";
 
@@ -141,7 +141,7 @@ const dummyProducts = [
 
 
 async function createTicket({ user_id, subject, description }) {
-  const res = await fetch("http://localhost:3005/api/tickets/", {
+  const res = await fetch("https://ratilalandsonscrm.onrender.com/api/tickets/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -552,7 +552,7 @@ export default function CustomerProfileView() {
   if (!customer) return <div className="p-8 text-center text-gray-500">Customer not found.</div>;
 
   // Avatar/profile image URL logic
-  const API_BASE_URL = "http://localhost:3005";
+  const API_BASE_URL = "https://ratilalandsonscrm.onrender.com";
   let imageUrl = customer?.profile_picture || customer?.avatar_url || "";
   if (imageUrl && imageUrl.startsWith("/")) {
     imageUrl = API_BASE_URL + imageUrl;

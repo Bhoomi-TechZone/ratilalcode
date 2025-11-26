@@ -9,7 +9,7 @@ const NAV_SECTIONS = [
   { key: "logs", name: "Stock In/Out Logs" },
 ];
 
-const API_BASE = "http://localhost:3005/api/stock";
+const API_BASE = "https://ratilalandsonscrm.onrender.com/api/stock";
 const PAGE_SIZE = 10;
 
 // --- COMPONENTS ---

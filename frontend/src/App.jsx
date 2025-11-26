@@ -29,7 +29,7 @@ import EmployeeDashboard from './pages/hr/EmployeeDashboard';
 import EmployeeDetails from './components/hr/EmployeeDetails';
 import { AttendanceManagement } from './components/hr';
 import MainDashboard from './pages/MainDashboard';
-import StaffManagement from './pages/StaffManagement';
+import EmployeeManagement from './components/hr/EmployeeManagement';
 import UserAttendanceView from './components/hr/MyAttendancePage';
 
 
@@ -132,7 +132,7 @@ function App() {
             <Route path="/users/roles" element={<RolesProfiles />} />
             {/* <Route path="/users/hierarchy" element={<UserHierarchyPage/>}/> */}
             <Route path="/customers" element={<CRMPage />} />
-            <Route path="/hr/*" element={<StaffManagement />} />
+            <Route path="/hr/*" element={<EmployeeManagement />} />
             {/* <Route path="/hr/*" element={HRStaffModuleComplete /> } /> */}
             <Route path="/inventory/*" element={<InventoryManagement />} />
             {/* <Route path="/accounts/*" element={<AccountsFinance />} /> */}

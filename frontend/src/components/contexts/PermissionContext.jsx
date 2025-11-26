@@ -19,7 +19,7 @@ export function PermissionsProvider({ children }) {
       let allRoles = [];
       try {
         const token = localStorage.getItem("access_token");
-        const res = await fetch("http://localhost:3005/api/roles/", {
+        const res = await fetch("https://ratilalandsonscrm.onrender.com/api/roles/", {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (res.ok) {
@@ -60,7 +60,7 @@ export function PermissionsProvider({ children }) {
       // 3. Get permissions
       const token = localStorage.getItem("access_token");
       if (token) {
-        const res = await fetch("http://localhost:3005/api/permissions/my", {
+        const res = await fetch("https://ratilalandsonscrm.onrender.com/api/permissions/my", {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {

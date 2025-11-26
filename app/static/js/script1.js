@@ -1,5 +1,5 @@
 // API Configuration
-        const API_URL = 'http://localhost:3005';
+        const API_URL = 'https://ratilalandsonscrm.onrender.com';
 
         // DOM Elements
         const sections = document.querySelectorAll('.section');

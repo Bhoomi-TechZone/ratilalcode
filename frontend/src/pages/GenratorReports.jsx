@@ -69,7 +69,7 @@ export default function GeneratorsReport({ onDataUpdateRef }) {
     const token = localStorage.getItem("access_token");
     // Change URL to fetch combined report without site_id filter
     const resp = await fetch(
-      `http://localhost:3005/api/generators-utilities/reports?start=${start}&end=${end}`,
+      `https://ratilalandsonscrm.onrender.com/api/generators-utilities/reports?start=${start}&end=${end}`,
       {
         headers: {
           Authorization: `Bearer ${token}`

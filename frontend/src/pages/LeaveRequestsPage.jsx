@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 
 // API base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3005";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://ratilalandsonscrm.onrender.com";
 
 const LeaveRequestsPage = () => {
   // State management

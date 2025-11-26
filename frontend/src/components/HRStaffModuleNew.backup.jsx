@@ -21,7 +21,7 @@ const HRStaffModuleNew = () => {
     setLoginError('');
 
     try {
-      const response = await fetch('http://localhost:3005/api/auth/login', {
+      const response = await fetch('https://ratilalandsonscrm.onrender.com/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -81,7 +81,7 @@ const HRStaffModuleNew = () => {
       const token = localStorage.getItem('access_token');
       if (!token) throw new Error('No token');
 
-      const response = await fetch('http://localhost:3005/api/employees/me', {
+      const response = await fetch('https://ratilalandsonscrm.onrender.com/api/employees/me', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -196,7 +196,7 @@ const HRStaffModuleNew = () => {
   const fetchDashboardStats = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('http://localhost:3005/api/employees/dashboard-stats', {
+      const response = await fetch('https://ratilalandsonscrm.onrender.com/api/employees/dashboard-stats', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -227,7 +227,7 @@ const HRStaffModuleNew = () => {
   const fetchEmployees = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('http://localhost:3005/api/employees?page=1&limit=50', {
+      const response = await fetch('https://ratilalandsonscrm.onrender.com/api/employees?page=1&limit=50', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -258,7 +258,7 @@ const HRStaffModuleNew = () => {
     
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:3005/api/employees/${currentUser.id}/attendance`, {
+      const response = await fetch(`https://ratilalandsonscrm.onrender.com/api/employees/${currentUser.id}/attendance`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -289,7 +289,7 @@ const HRStaffModuleNew = () => {
 
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:3005/api/employees/${currentUser.id}/attendance/${action}`, {
+      const response = await fetch(`https://ratilalandsonscrm.onrender.com/api/employees/${currentUser.id}/attendance/${action}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -321,7 +321,7 @@ const HRStaffModuleNew = () => {
   const handleEmployeeAttendanceAction = async (employeeId, action) => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:3005/api/employees/${employeeId}/attendance/${action}`, {
+      const response = await fetch(`https://ratilalandsonscrm.onrender.com/api/employees/${employeeId}/attendance/${action}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

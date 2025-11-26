@@ -1,6 +1,6 @@
 // API configuration
 const API_CONFIG = {
-  BASE_URL: 'http://localhost:3005',
+  BASE_URL: 'https://ratilalandsonscrm.onrender.com',
   API_PREFIX: '/api'
 };
 

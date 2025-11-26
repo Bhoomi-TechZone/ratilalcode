@@ -3,7 +3,7 @@
  */
 
 // API Base URL
-export const API_BASE_URL = 'http://localhost:3005';
+export const API_BASE_URL = 'https://ratilalandsonscrm.onrender.com';
 
 // Leave Types
 export const LEAVE_TYPES = [

@@ -5,10 +5,10 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 
-const SITE_API_BASE = "http://localhost:3005/api/sites";
-const GENERATOR_API_BASE = "http://localhost:3005/api/generators-utilities/generators";
-const EMPLOYEE_API_BASE = "http://localhost:3005/api/auth/users?skip=0&limit=100";
-const REPORTS_API_BASE = "http://localhost:3005/api/generators-utilities/reports";
+const SITE_API_BASE = "https://ratilalandsonscrm.onrender.com/api/sites";
+const GENERATOR_API_BASE = "https://ratilalandsonscrm.onrender.com/api/generators-utilities/generators";
+const EMPLOYEE_API_BASE = "https://ratilalandsonscrm.onrender.com/api/auth/users?skip=0&limit=100";
+const REPORTS_API_BASE = "https://ratilalandsonscrm.onrender.com/api/generators-utilities/reports";
 const PAGE_SIZE = 10;
 const COLORS = ["#2d6dfc", "#16a34a", "#ea580c", "#db2777", "#9333ea", "#14b8a6"];
 

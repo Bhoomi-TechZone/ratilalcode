@@ -40,7 +40,7 @@ function TaskView() {
       try {
         const token = localStorage.getItem("access_token") || "";
         const fetches = userObj.roles.map(roleId =>
-          fetch(`http://localhost:3005/api/roles/${roleId}`, {
+          fetch(`https://ratilalandsonscrm.onrender.com/api/roles/${roleId}`, {
             headers: { Authorization: `Bearer ${token}` }
           }).then(res => res.ok ? res.json() : null)
         );
@@ -62,11 +62,11 @@ function TaskView() {
   if (loading) return <div className="text-center py-32">Loading roles...</div>;
   if (!userObj || !userObj.user_id) return null;
 
-  const isAdmin = appRoles.includes("admin");
-  const hasEmployeeAccess = appRoles.includes("employee") || appRoles.includes("hr");
+  const canSeeTaskManagement = appRoles.includes("admin") || appRoles.includes("hr");
+  const isEmployee = appRoles.includes("employee");
 
-  if (hasEmployeeAccess) return <EmployeeTaskView />;
-  if (isAdmin) return <TaskWorkflowManagement />;
+  if (canSeeTaskManagement) return <TaskWorkflowManagement />;
+  if (isEmployee) return <EmployeeTaskView />;
   return <div className="text-center py-32">You do not have access to this page.</div>;
 }
 

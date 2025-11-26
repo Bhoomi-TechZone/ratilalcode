@@ -1,984 +1,2132 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Calendar, Clock, CheckCircle, XCircle, Search, Filter, Plus,
-  Download, Eye, Edit, Trash2, AlertCircle, User, Users, X
-} from 'lucide-react';
 
-// Import API utilities
-import { 
-  fetchAttendance, 
-  fetchEmployees, 
-  markAttendance as apiMarkAttendance,
-  editAttendanceRecord as apiEditAttendanceRecord,
-  createManualAttendance as apiCreateManualAttendance
-} from '../../utils/hrAPI';
+import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'react-toastify';
 
-// Import constants
-import hrConstants from '../../utils/hrConstants';
+const API_BASE_URL = "http://localhost:8005";
 
-// Attendance Management Component
-const AttendanceManagement = () => {
-  const [attendanceRecords, setAttendanceRecords] = useState([]);
-  const [filters, setFilters] = useState({
+const HRAttendanceDashboard = () => {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [allAttendance, setAllAttendance] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  
+  // Filter states
+  const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [selectedEmployee, setSelectedEmployee] = useState('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  
+  // Modal states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showMarkAttendanceModal, setShowMarkAttendanceModal] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [selectedEmployeeForProfile, setSelectedEmployeeForProfile] = useState(null);
+  const [employeeProfile, setEmployeeProfile] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [markAttendanceForm, setMarkAttendanceForm] = useState({
+    user_id: '',
     date: new Date().toISOString().split('T')[0],
-    department: '',
-    employee: '',
-    status: 'all'
+    check_in: '',
+    check_out: '',
+    status: 'present',
+    notes: ''
   });
+  const [viewType, setViewType] = useState('table'); // 'table' or 'analytics'
+  const [analyticsTimeRange, setAnalyticsTimeRange] = useState('daily'); // 'daily', 'weekly', 'monthly'
+  
+  // Stats
   const [stats, setStats] = useState({
     totalPresent: 0,
     totalAbsent: 0,
-    totalLate: 0,
-    attendanceRate: 0
+    lateEntries: 0,
+    attendancePercentage: 0,
+    onLeave: 0,
+    halfDay: 0
   });
-  const [loading, setLoading] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState('create'); // 'create' or 'edit'
-  const [employees, setEmployees] = useState([]);
-  const [currentRecord, setCurrentRecord] = useState(null);
-  const [formData, setFormData] = useState({
-    user_id: '',
-    employee_name: '',
-    date: new Date().toISOString().split('T')[0],
-    status: 'present',
-    checkin_time: '09:00',
-    checkout_time: '17:00',
-    notes: ''
-  });
-    const [authError, setAuthError] = useState(false);
-    const [authErrorMsg, setAuthErrorMsg] = useState('');
-  const [userRole, setUserRole] = useState('');
-  const [currentUser, setCurrentUser] = useState(null);
-  const [location, setLocation] = useState({ latitude: null, longitude: null, address: '' });
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [todayAttendance, setTodayAttendance] = useState(null);
+  // Server-provided attendance summary (from /api/hr/stats)
+  const [attendanceSummaryServer, setAttendanceSummaryServer] = useState(null);
 
-  // Get current location
-  const getCurrentLocation = () => {
-    setLocationLoading(true);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          setLocation(prev => ({ ...prev, latitude, longitude }));
-          
-          // Get address from coordinates (optional)
-          try {
-            const response = await fetch(
-              `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=5aaae798298c48148346d2de4abcde8f`
-            );
-            if (response.ok) {
-              const data = await response.json();
-              if (data.results && data.results[0]) {
-                setLocation(prev => ({ ...prev, address: data.results[0].formatted }));
-              }
-            }
-          } catch (error) {
-            console.log('Address lookup failed, using coordinates only');
-            setLocation(prev => ({ ...prev, address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` }));
-          }
-          setLocationLoading(false);
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          setLocationLoading(false);
-          alert('Unable to get your location. Please enable location services.');
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-      );
-    } else {
-      setLocationLoading(false);
-      alert('Geolocation is not supported by this browser.');
-    }
-  };
-
-  // Check user role and get current user info
-  const checkUserRole = () => {
-    try {
-      const userData = localStorage.getItem('user') || sessionStorage.getItem('user');
-      if (userData) {
-        const user = JSON.parse(userData);
-        setCurrentUser(user);
-        
-        // Check if user is admin (adjust this logic based on your user structure)
-        const roles = user.roles || user.role || [];
-        const isAdmin = Array.isArray(roles) 
-          ? roles.some(role => role.toLowerCase().includes('admin') || role.toLowerCase().includes('hr'))
-          : (typeof roles === 'string' && (roles.toLowerCase().includes('admin') || roles.toLowerCase().includes('hr')));
-        
-        setUserRole(isAdmin ? 'admin' : 'user');
-      }
-    } catch (error) {
-      console.error('Error parsing user data:', error);
-      setUserRole('user'); // Default to user role
-    }
-  };
-
-    // Initialize - check for authentication and integrate with parent component
   useEffect(() => {
-    const initComponent = () => {
-      // Check authentication
-      const token = localStorage.getItem('access_token') || 
-                   localStorage.getItem('token') || 
-                   sessionStorage.getItem('token');
-      
-      if (!token) {
-        setAuthError(true);
-        return;
+    const fetchCurrentUser = async () => {
+      try {
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+          toast.error("No access token found");
+          setIsLoading(false);
+          return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (response.ok) {
+          const userData = await response.json();
+          setCurrentUser(userData);
+          
+          // Check if user is HR/Admin - more comprehensive role checking
+          const userRoles = Array.isArray(userData.roles) 
+            ? userData.roles.map(r => typeof r === 'string' ? r.toLowerCase() : (r.name || '').toLowerCase())
+            : typeof userData.roles === 'string' 
+            ? [userData.roles.toLowerCase()] 
+            : [];
+          
+          // Check for HR or Admin roles with more flexible matching
+          const isHR = userRoles.some(role => 
+            role.includes('hr') || 
+            role.includes('human') || 
+            role.includes('human_resources') ||
+            role.includes('human resource')
+          );
+          const isAdmin = userRoles.includes('admin') || userRoles.includes('administrator') || userRoles.includes('superuser');
+          
+          if (!isHR && !isAdmin) {
+            toast.error("Access denied. HR or Admin role required.");
+            return;
+          }
+          
+          fetchAllData();
+        } else {
+          toast.error("Failed to fetch user data");
+        }
+      } catch (error) {
+        console.error("Error fetching current user:", error);
+        toast.error("Error loading user data");
+      } finally {
+        setIsLoading(false);
       }
-      
-      setAuthError(false);
-      
-      // Check user role
-      checkUserRole();
-      
-      // Get current location for non-admin users
-      getCurrentLocation();
     };
-    
-    initComponent();
+
+    fetchCurrentUser();
   }, []);
 
+  const fetchAllData = async () => {
+    await Promise.all([
+      fetchAllAttendance(),
+      fetchEmployees(),
+      fetchLeaveRequests(),
+      fetchDashboardStats(),
+      fetchAttendanceStats()
+    ]);
+  };
+
+  // Re-fetch server stats when filters or time range change so cards stay in sync
   useEffect(() => {
-    console.log("AttendanceManagement component mounted or filters changed", filters);
+    // Only fetch if user is loaded (to ensure token exists)
+    if (currentUser) {
+      fetchAttendanceStats();
+    }
+  }, [selectedDepartment, selectedEmployee, startDate, endDate, statusFilter, analyticsTimeRange, currentUser]);
+
+  // Fetch the simple attendance stats endpoint (user-provided /api/hr/stats)
+  const fetchAttendanceStats = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`${API_BASE_URL}/api/hr/stats`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) return;
+
+      const data = await res.json();
+
+      // Map backend fields to the shape used by the attendance summary cards
+      const mapped = {
+        present: data.totalPresent ?? data.total_present ?? 0,
+        absent: data.totalAbsent ?? data.total_absent ?? 0,
+        leave: data.onLeave ?? data.on_leave ?? data.onLeave ?? 0,
+        halfDay: data.halfDay ?? data.half_day ?? 0,
+        total: data.totalEmployees ?? data.total_employees ?? 0,
+        lateEntries: data.lateEntries ?? data.late_entries ?? 0,
+        attendancePercentage: data.attendancePercentage ?? data.attendance_percentage ?? 0
+      };
+
+      setAttendanceSummaryServer(mapped);
+    } catch (err) {
+      console.error('Failed to fetch attendance stats:', err);
+    }
+  };
+
+  // Fetch pre-aggregated dashboard stats from backend if available
+  const fetchDashboardStats = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const res = await fetch(`${API_BASE_URL}/api/hr/dashboard`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        // Backend returns keys like presentToday, absentToday, onLeaveToday, etc.
+        // Map them into the local `stats` shape used by UI
+        const mapped = {
+          totalPresent: result.presentToday ?? result.present_today ?? 0,
+          totalAbsent: result.absentToday ?? result.absent_today ?? 0,
+          lateEntries: result.lateEntries ?? result.totalLate ?? 0,
+          attendancePercentage: result.attendancePercentage ?? result.attendance_rate ?? 0,
+          onLeave: result.onLeaveToday ?? result.on_leave_today ?? 0,
+          halfDay: result.halfDay ?? 0
+        };
+
+        // Only override stats if we have meaningful values
+        if (Object.values(mapped).some(v => v !== 0)) {
+          setStats(mapped);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch dashboard stats:', err);
+    }
+  };
+
+  // Helper function to parse check-in time for late calculation
+  const parseCheckIn = (checkInValue) => {
+    if (!checkInValue) return null;
+    try {
+      // Try to parse as time string first
+      if (typeof checkInValue === 'string') {
+        // Handle formats like "HH:MM" or "HH:MM:SS"
+        const timeMatch = checkInValue.match(/(\d{1,2}):(\d{2})/);
+        if (timeMatch) {
+          return { h: parseInt(timeMatch[1]), m: parseInt(timeMatch[2]) };
+        }
+        // Handle full datetime string
+        const date = new Date(checkInValue);
+        if (!isNaN(date.getTime())) {
+          return { h: date.getHours(), m: date.getMinutes() };
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Process attendance data to normalize field names
+  const processAllAttendance = (attendanceData) => {
+    console.log('Raw attendance data:', attendanceData);
     
-    // Simple function to get token using consistent approach
-    const getAuthToken = () => {
-      const token = localStorage.getItem('access_token') || 
-                   localStorage.getItem('token') ||
-                   window.sessionStorage.getItem('token');
+    return attendanceData.map(record => {
+      console.log('Processing record:', record);
       
-      if (token) {
-        console.log("Found authentication token");
-        return token;
+      // Normalize field names for consistent handling - check ALL possible field names
+      const checkInTime = record.check_in || 
+                         record.checkin || 
+                         record.checkin_time || 
+                         record.checkin_display ||
+                         record['check-in'] ||
+                         record.check_in_time;
+                         
+      const checkOutTime = record.check_out || 
+                          record.checkout || 
+                          record.checkout_time || 
+                          record.checkout_display ||
+                          record['check-out'] ||
+                          record.check_out_time;
+      
+      const processedRecord = {
+        ...record,
+        // Normalize check-in time field
+        check_in: checkInTime,
+        // Normalize check-out time field  
+        check_out: checkOutTime,
+        // Normalize other fields
+        employee_id: record.employee_id || record.user_id,
+        employee_name: record.employee_name || record.user_name || record.full_name,
+        location: record.location || record.location_name
+      };
+      
+      console.log('Processed record with check_in:', processedRecord.check_in, 'type:', typeof processedRecord.check_in);
+      
+      // Format times if they're datetime objects or ISO strings
+      if (processedRecord.check_in) {
+        if (typeof processedRecord.check_in === 'string') {
+          if (processedRecord.check_in.includes('T') || processedRecord.check_in.includes('Z')) {
+            // ISO datetime string
+            try {
+              const date = new Date(processedRecord.check_in);
+              processedRecord.check_in = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+              console.log('Formatted check_in time from ISO:', processedRecord.check_in);
+            } catch (e) {
+              console.error('Error formatting check-in time from ISO:', e);
+            }
+          } else if (processedRecord.check_in.includes(':')) {
+            // Already a time string, keep as is
+            console.log('Check-in is already time format:', processedRecord.check_in);
+          }
+        } else if (processedRecord.check_in instanceof Date) {
+          // Date object
+          processedRecord.check_in = processedRecord.check_in.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+          console.log('Formatted check_in time from Date object:', processedRecord.check_in);
+        }
       }
       
-      console.warn("No authentication token found in any location");
+      if (processedRecord.check_out) {
+        if (typeof processedRecord.check_out === 'string') {
+          if (processedRecord.check_out.includes('T') || processedRecord.check_out.includes('Z')) {
+            // ISO datetime string
+            try {
+              const date = new Date(processedRecord.check_out);
+              processedRecord.check_out = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+              console.log('Formatted check_out time from ISO:', processedRecord.check_out);
+            } catch (e) {
+              console.error('Error formatting check-out time from ISO:', e);
+            }
+          } else if (processedRecord.check_out.includes(':')) {
+            // Already a time string, keep as is
+            console.log('Check-out is already time format:', processedRecord.check_out);
+          }
+        } else if (processedRecord.check_out instanceof Date) {
+          // Date object
+          processedRecord.check_out = processedRecord.check_out.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+          console.log('Formatted check_out time from Date object:', processedRecord.check_out);
+        }
+      }
+      
+      return processedRecord;
+    });
+  };
+
+  const fetchAllAttendance = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(`${API_BASE_URL}/api/hr/attendance`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          // Process the attendance data to normalize field names
+          const processedData = processAllAttendance(data.data);
+          setAllAttendance(processedData);
+          calculateStats(processedData);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching attendance:", error);
+      toast.error("Failed to load attendance data");
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(`${API_BASE_URL}/api/hr/employees`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setEmployees(data.employees || data);
+        
+        // Extract unique departments
+        const depts = [...new Set((data.employees || data).map(emp => emp.department).filter(Boolean))];
+        setDepartments(depts);
+      }
+    } catch (error) {
+      console.error("Error fetching employees:", error);
+    }
+  };
+
+  const fetchLeaveRequests = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(`${API_BASE_URL}/api/hr/leave-requests`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setLeaveRequests(data.leave_requests || data);
+      }
+    } catch (error) {
+      console.error("Error fetching leave requests:", error);
+    }
+  };
+
+  const calculateStats = (attendanceData) => {
+    const today = new Date().toISOString().split('T')[0];
+    const rows = Array.isArray(attendanceData) ? attendanceData : [];
+
+    // Normalize and pick records whose date is today (robust to iso/timestamp formats)
+    const todayRecords = rows.filter((record) => {
+      if (!record) return false;
+      const recDateRaw = record.date || record.recorded_at || '';
+      let recDate = '';
+      try {
+        if (typeof recDateRaw === 'string' && recDateRaw.includes('T')) {
+          recDate = new Date(recDateRaw).toISOString().split('T')[0];
+        } else if (typeof recDateRaw === 'string' && recDateRaw.length >= 10) {
+          recDate = recDateRaw.slice(0, 10);
+        } else if (recDateRaw instanceof Date) {
+          recDate = recDateRaw.toISOString().split('T')[0];
+        } else {
+          recDate = String(recDateRaw);
+        }
+      } catch (e) {
+        recDate = String(recDateRaw);
+      }
+
+      return recDate === today;
+    });
+
+    // Helpers to normalize status and check-in time
+    const normalizeStatus = (s) => (s || '').toString().toLowerCase();
+
+    const parseCheckIn = (checkIn) => {
+      if (!checkIn) return null;
+      // If it's an ISO string
+      if (typeof checkIn === 'string' && checkIn.includes('T')) {
+        try {
+          const d = new Date(checkIn);
+          return { h: d.getHours(), m: d.getMinutes() };
+        } catch (e) {
+          // fallthrough
+        }
+      }
+
+      if (typeof checkIn === 'string' && checkIn.split(':').length >= 2) {
+        const parts = checkIn.split(':').map(Number);
+        return { h: parts[0], m: parts[1] };
+      }
+
+      // Not parseable
       return null;
     };
-    
-    const token = getAuthToken();
-    
-    if (token) {
-      // Store in both locations for maximum compatibility
-      localStorage.setItem('token', token);
-      localStorage.setItem('access_token', token);
-      console.log("Token stored in localStorage. Fetching attendance data...");
-      
-      if (userRole === 'admin') {
-        fetchAttendanceData();
-      } else if (userRole === 'user') {
-        fetchUserAttendance();
-      }
-    } else {
-      console.error("No authentication token found. Cannot fetch attendance data.");
+
+    const present = todayRecords.filter(r => {
+      const st = normalizeStatus(r.status);
+      return st === 'present' || st === 'p' || st === 'on_duty' || st === 'checked_in';
+    }).length;
+
+    const absent = todayRecords.filter(r => {
+      const st = normalizeStatus(r.status);
+      return st === 'absent' || st === 'a';
+    }).length;
+
+    const onLeave = todayRecords.filter(r => normalizeStatus(r.status) === 'leave' || normalizeStatus(r.status) === 'on_leave').length;
+
+    const halfDay = todayRecords.filter(r => normalizeStatus(r.status) === 'half_day' || normalizeStatus(r.status) === 'halfday' || normalizeStatus(r.status) === 'half-day').length;
+
+    // Late entries (check-in after 9:30 AM)
+    const late = todayRecords.filter(record => {
+      const ci = record.check_in || 
+                record.checkin || 
+                record.checkin_display || 
+                record.check_in_time || 
+                record.checkin_time ||
+                record['check-in'];
+      const parsed = parseCheckIn(ci);
+      if (!parsed) return false;
+      const { h, m } = parsed;
+      if (h > 9) return true;
+      if (h === 9 && m > 30) return true;
+      return false;
+    }).length;
+
+    const total = todayRecords.length;
+    const percentage = total > 0 ? ((present / total) * 100).toFixed(1) : 0;
+
+    // Debugging: if counts zero but there are rows, log a sample to help diagnose format issues
+    if (total > 0 && present === 0) {
+      // console.debug('calculateStats sample todayRecords[0]:', todayRecords[0]);
     }
-  }, [filters, userRole]);
 
-  // Fetch today's attendance for current user
-  const fetchUserAttendance = async () => {
-    if (!currentUser) return;
+    setStats({
+      totalPresent: present,
+      totalAbsent: absent,
+      lateEntries: late,
+      attendancePercentage: percentage,
+      onLeave: onLeave,
+      halfDay: halfDay
+    });
+  };
 
-    setLoading(true);
+  // Recalculate stats whenever attendance data or filters change
+  useEffect(() => {
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const filtered = getFilteredAttendance();
+      // If there are no filtered records but allAttendance has data, still run calculateStats on filtered to show zeros
+      calculateStats(filtered);
+    } catch (err) {
+      console.error('Error calculating filtered stats:', err);
+    }
+  }, [allAttendance, selectedDepartment, selectedEmployee, startDate, endDate, statusFilter]);
 
-      // Prefer employee_id (must match your POST), fallback to other possible user keys
-      const employeeId =
-        currentUser.employee_id ||
-        currentUser.userid ||
-        currentUser.user_id ||
-        currentUser.id ||
-        currentUser.username;
+  const getFilteredAttendance = () => {
+    let filtered = [...allAttendance];
+    
+    if (selectedDepartment !== 'all') {
+      const deptEmployees = employees.filter(emp => emp.department === selectedDepartment);
+      const deptEmployeeIds = deptEmployees.map(emp => emp.id || emp._id || emp.user_id);
+      filtered = filtered.filter(record => deptEmployeeIds.includes(record.user_id));
+    }
+    
+    if (selectedEmployee !== 'all') {
+      filtered = filtered.filter(record => record.user_id === selectedEmployee);
+    }
+    
+    if (startDate) {
+      filtered = filtered.filter(record => record.date >= startDate);
+    }
+    
+    if (endDate) {
+      filtered = filtered.filter(record => record.date <= endDate);
+    }
+    
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(record => record.status === statusFilter);
+    }
+    
+    return filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+  };
 
-      // Fetch all recent records for robust matching (remove paging for now if not needed)
-      const userAttendance = await fetchAttendance({
-        employee: employeeId,
-        current_user_roles: Array.isArray(currentUser?.roles) ? currentUser.roles : (currentUser?.role ? [currentUser.role] : ['user'])
-        // You can add { limit: 10 } if you want, but better to let backend filter
+  const handleEditAttendance = (record) => {
+    setSelectedRecord(record);
+    setEditForm({
+      date: record.date,
+      check_in: record.check_in || '',
+      check_out: record.check_out || '',
+      status: record.status,
+      working_hours: record.working_hours || '',
+      notes: record.notes || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const submitEditAttendance = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(`${API_BASE_URL}/api/hr/attendance/${selectedRecord._id}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(editForm)
       });
 
-      // Find today's attendance for current user (ID and date checks)
-      const todaysAttendance = Array.isArray(userAttendance)
-        ? userAttendance.find(record => {
-            // ID match: field might be employee_id, user_id, or userid in backend record!
-            const idMatch =
-              record.employee_id === employeeId ||
-              record.user_id === employeeId ||
-              record.userid === employeeId;
-
-            // Date match: prefer 'date', then fallback to 'checkintime' or even 'check_in'
-            let dateMatch = false;
-            if (record.date && record.date.length >= 10) {
-              dateMatch = record.date.slice(0, 10) === todayStr;
-            } else if (record.checkintime) {
-              dateMatch = new Date(record.checkintime).toISOString().split('T')[0] === todayStr;
-            } else if (record.check_in) {
-              dateMatch = new Date(record.check_in).toISOString().split('T')[0] === todayStr;
-            }
-            return idMatch && dateMatch;
-          })
-        : null;
-
-      setTodayAttendance(todaysAttendance || null);
+      if (response.ok) {
+        toast.success("Attendance updated successfully");
+        setShowEditModal(false);
+        fetchAllAttendance();
+      } else {
+        toast.error("Failed to update attendance");
+      }
     } catch (error) {
-      console.error('Error fetching user attendance:', error);
-      setTodayAttendance(null);
-    } finally {
-      setLoading(false);
+      console.error("Error updating attendance:", error);
+      toast.error("Error updating attendance");
     }
   };
 
+  const handleLeaveAction = async (leaveId, action) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(`${API_BASE_URL}/api/hr/leave-requests/${leaveId}/${action}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          reviewed_by: currentUser?.full_name || currentUser?.username
+        })
+      });
 
-  // Fetch employees list for the dropdown
-  useEffect(() => {
-    const getEmployees = async () => {
-      try {
-        console.log("Fetching employees...");
-        
-        // Use the utility function to fetch employees
-        const employeeData = await fetchEmployees();
-        console.log('Raw employees:', employeeData);
-        // Ensure employees is always an array, even if the API returns something else
-        if (Array.isArray(employeeData)) {
-          setEmployees(employeeData);
-        } else if (employeeData && typeof employeeData === 'object') {
-          // If it's an object with data property that's an array
-          if (Array.isArray(employeeData.data)) {
-            setEmployees(employeeData.data);
-          } else {
-            // Convert object to array if needed
-            const employeeArray = Object.values(employeeData);
-            setEmployees(Array.isArray(employeeArray) ? employeeArray : []);
-          }
-        } else {
-          // Fallback to empty array
-          setEmployees([]);
-          console.error("Employees data is not in expected format:", employeeData);
-        }
-        
-        console.log("Fetched employees:", employees.length);
-      } catch (error) {
-        console.error('Error fetching employees:', error);
-        setEmployees([]); // Set to empty array on error
+      if (response.ok) {
+        toast.success(`Leave request ${action}d successfully`);
+        fetchLeaveRequests();
+        fetchAllAttendance();
+      } else {
+        toast.error(`Failed to ${action} leave request`);
       }
+    } catch (error) {
+      console.error(`Error ${action}ing leave:`, error);
+      toast.error(`Error ${action}ing leave request`);
+    }
+  };
+
+  const exportToCSV = () => {
+    const filtered = getFilteredAttendance();
+    const headers = ['Date', 'Employee', 'Department', 'Check In', 'Check Out', 'Working Hours', 'Status'];
+    const csvData = filtered.map(record => [
+      record.date,
+      record.user_name || 'N/A',
+      employees.find(emp => (emp.id || emp._id) === record.user_id)?.department || 'N/A',
+      record.check_in || 'N/A',
+      record.check_out || 'N/A',
+      record.working_hours || 'N/A',
+      record.status
+    ]);
+    
+    const csvContent = [headers, ...csvData].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `attendance_report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    
+    toast.success("Report exported successfully");
+  };
+
+  const handleViewProfile = async (userId) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      
+      // Fetch employee details
+      const empResponse = await fetch(`${API_BASE_URL}/api/hr/employees/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (empResponse.ok) {
+        const empData = await empResponse.json();
+        setSelectedEmployeeForProfile(empData.employee || empData);
+        
+        // Fetch employee's attendance history (last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const attendanceHistory = allAttendance.filter(
+          record => record.user_id === userId && 
+          new Date(record.date) >= thirtyDaysAgo
+        ).sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        // Calculate profile stats
+        const presentDays = attendanceHistory.filter(r => r.status === 'present').length;
+        const absentDays = attendanceHistory.filter(r => r.status === 'absent').length;
+        const lateDays = attendanceHistory.filter(r => {
+          if (r.check_in) {
+            const [hours, minutes] = r.check_in.split(':').map(Number);
+            return hours > 9 || (hours === 9 && minutes > 30);
+          }
+          return false;
+        }).length;
+        
+        const totalWorkingHours = attendanceHistory.reduce((sum, r) => {
+          return sum + parseFloat(r.working_hours || 0);
+        }, 0);
+        
+        const avgWorkingHours = attendanceHistory.length > 0 
+          ? (totalWorkingHours / attendanceHistory.length).toFixed(1) 
+          : 0;
+        
+        setEmployeeProfile({
+          ...empData.employee || empData,
+          attendanceHistory,
+          stats: {
+            presentDays,
+            absentDays,
+            lateDays,
+            totalDays: attendanceHistory.length,
+            attendanceRate: attendanceHistory.length > 0 
+              ? ((presentDays / attendanceHistory.length) * 100).toFixed(1) 
+              : 0,
+            avgWorkingHours
+          }
+        });
+        
+        setShowProfileModal(true);
+      } else {
+        toast.error("Failed to fetch employee details");
+      }
+    } catch (error) {
+      console.error("Error fetching employee profile:", error);
+      toast.error("Error loading employee profile");
+    }
+  };
+
+  const handleMarkAttendance = () => {
+    setMarkAttendanceForm({
+      user_id: '',
+      date: new Date().toISOString().split('T')[0],
+      check_in: '',
+      check_out: '',
+      status: 'present',
+      notes: 'Manually marked by HR'
+    });
+    setShowMarkAttendanceModal(true);
+  };
+
+  const submitMarkAttendance = async () => {
+    if (!markAttendanceForm.user_id) {
+      toast.error("Please select an employee");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(`${API_BASE_URL}/api/hr/attendance/manual-checkin`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(markAttendanceForm)
+       });
+
+      if (response.ok) {
+        toast.success("Attendance marked successfully");
+        setShowMarkAttendanceModal(false);
+        fetchAllAttendance();
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.detail || "Failed to mark attendance");
+      }
+    } catch (error) {
+      console.error("Error marking attendance:", error);
+      toast.error("Error marking attendance");
+    }
+  };
+
+  const formatTime = (timeString) => {
+    if (!timeString) return 'N/A';
+    try {
+      const [hours, minutes] = timeString.split(':');
+      const date = new Date();
+      date.setHours(parseInt(hours), parseInt(minutes));
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return timeString;
+    }
+  };
+
+  const formatDate = (dateString) => {
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const config = {
+      present: { bg: 'bg-green-100', text: 'text-green-800', label: 'Present' },
+      absent: { bg: 'bg-red-100', text: 'text-red-800', label: 'Absent' },
+      half_day: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Half Day' },
+      leave: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'On Leave' }
     };
     
-    getEmployees();
-  }, []);
+    const { bg, text, label } = config[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status };
+    
+    return (
+      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${bg} ${text}`}>
+        {label}
+      </span>
+    );
+  };
 
-  const fetchAttendanceData = async () => {
-    setLoading(true);
-    console.log("Fetching attendance data with filters:", filters);
-    try {
-      // Use the utility function to fetch attendance data with filters
-      const attendanceData = await fetchAttendance({
-        date: filters.date,
-        department: filters.department !== 'all' ? filters.department : '',
-        employee: filters.employee !== 'all' ? filters.employee : '',
-        status: filters.status !== 'all' ? filters.status : undefined,
-        page: 1,
-        limit: 100,
-        current_user_roles: Array.isArray(currentUser?.roles) ? currentUser.roles : (currentUser?.role ? [currentUser.role] : ['user'])
-      });
+  // Get alerts for continuous absences or late check-ins
+  const getAlerts = () => {
+    const alerts = [];
+    
+    // Check for continuous absences (3+ consecutive days)
+    const employeeAbsences = {};
+    allAttendance.forEach(record => {
+      if (record.status === 'absent') {
+        if (!employeeAbsences[record.user_id]) {
+          employeeAbsences[record.user_id] = [];
+        }
+        employeeAbsences[record.user_id].push(record.date);
+      }
+    });
+    
+    Object.entries(employeeAbsences).forEach(([userId, dates]) => {
+      dates.sort();
+      let consecutive = 1;
+      for (let i = 1; i < dates.length; i++) {
+        const prevDate = new Date(dates[i - 1]);
+        const currDate = new Date(dates[i]);
+        const diff = (currDate - prevDate) / (1000 * 60 * 60 * 24);
+        
+        if (diff === 1) {
+          consecutive++;
+          if (consecutive >= 3) {
+            const employee = employees.find(emp => (emp.id || emp._id) === userId);
+            alerts.push({
+              type: 'danger',
+              message: `${employee?.full_name || 'Employee'} has ${consecutive} consecutive absences`,
+              icon: 'exclamation-triangle'
+            });
+            break;
+          }
+        } else {
+          consecutive = 1;
+        }
+      }
+    });
+    
+    // Check for frequent late check-ins (5+ in last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const employeeLateEntries = {};
+    allAttendance.forEach(record => {
+      if (new Date(record.date) >= thirtyDaysAgo && record.check_in) {
+        const [hours, minutes] = record.check_in.split(':').map(Number);
+        if (hours > 9 || (hours === 9 && minutes > 30)) {
+          employeeLateEntries[record.user_id] = (employeeLateEntries[record.user_id] || 0) + 1;
+        }
+      }
+    });
+    
+    Object.entries(employeeLateEntries).forEach(([userId, count]) => {
+      if (count >= 5) {
+        const employee = employees.find(emp => (emp.id || emp._id) === userId);
+        alerts.push({
+          type: 'warning',
+          message: `${employee?.full_name || 'Employee'} has ${count} late check-ins in the last 30 days`,
+          icon: 'clock'
+        });
+      }
+    });
+    
+    return alerts;
+  };
+
+  // Analytics Functions
+  const getAttendanceByTimeRange = () => {
+    const now = new Date();
+    let startDate;
+    
+    switch(analyticsTimeRange) {
+      case 'daily':
+        startDate = new Date(now.setHours(0, 0, 0, 0));
+        break;
+      case 'weekly':
+        startDate = new Date(now.setDate(now.getDate() - 7));
+        break;
+      case 'monthly':
+        startDate = new Date(now.setDate(now.getDate() - 30));
+        break;
+      default:
+        startDate = new Date(now.setDate(now.getDate() - 7));
+    }
+    
+    return allAttendance.filter(record => new Date(record.date) >= startDate);
+  };
+
+  const getAttendanceSummary = () => {
+    const records = getAttendanceByTimeRange();
+    
+    return {
+      present: records.filter(r => r.status === 'present').length,
+      absent: records.filter(r => r.status === 'absent').length,
+      leave: records.filter(r => r.status === 'leave').length,
+      halfDay: records.filter(r => r.status === 'half_day').length,
+      total: records.length
+    };
+  };
+
+  const getDepartmentWiseAttendance = () => {
+    const deptData = {};
+    
+    departments.forEach(dept => {
+      const deptEmployees = employees.filter(emp => emp.department === dept);
+      const deptEmployeeIds = deptEmployees.map(emp => emp.id || emp._id || emp.user_id);
+      const deptRecords = getAttendanceByTimeRange().filter(record => 
+        deptEmployeeIds.includes(record.user_id)
+      );
       
-      console.log("Attendance data array:", attendanceData);
-      console.log("Number of records:", attendanceData.length);
-      
-      if (attendanceData.length === 0) {
-        console.warn("No attendance records found in response");
+      deptData[dept] = {
+        present: deptRecords.filter(r => r.status === 'present').length,
+        absent: deptRecords.filter(r => r.status === 'absent').length,
+        leave: deptRecords.filter(r => r.status === 'leave').length,
+        total: deptRecords.length
+      };
+    });
+    
+    return deptData;
+  };
+
+  const getLateArrivalsTrend = () => {
+    const records = getAttendanceByTimeRange();
+    const lateByDate = {};
+    
+    records.forEach(record => {
+      if (record.check_in) {
+        const [hours, minutes] = record.check_in.split(':').map(Number);
+        if (hours > 9 || (hours === 9 && minutes > 30)) {
+          lateByDate[record.date] = (lateByDate[record.date] || 0) + 1;
+        }
+      }
+    });
+    
+    return Object.entries(lateByDate)
+      .sort((a, b) => new Date(a[0]) - new Date(b[0]))
+      .slice(-7); // Last 7 days
+  };
+
+  const getEarlyLeavesTrend = () => {
+    const records = getAttendanceByTimeRange();
+    const earlyByDate = {};
+    
+    records.forEach(record => {
+      if (record.check_out) {
+        const [hours, minutes] = record.check_out.split(':').map(Number);
+        if (hours < 17 || (hours === 17 && minutes < 30)) {
+          earlyByDate[record.date] = (earlyByDate[record.date] || 0) + 1;
+        }
+      }
+    });
+    
+    return Object.entries(earlyByDate)
+      .sort((a, b) => new Date(a[0]) - new Date(b[0]))
+      .slice(-7); // Last 7 days
+  };
+
+  const getTopPunctualEmployees = () => {
+    const employeeScores = {};
+    const records = getAttendanceByTimeRange();
+    
+    records.forEach(record => {
+      if (!employeeScores[record.user_id]) {
+        employeeScores[record.user_id] = {
+          name: record.user_name,
+          onTime: 0,
+          total: 0
+        };
       }
       
-      // Process the data to match our component's expected format
-      const processedData = attendanceData.map(record => {
-        console.log("Processing record:", record);
-        return {
-          id: record._id,
-          user_id: record.user_id || record.employee_id,
-          employee_id: record.user_id || record.employee_id,
-          employee_name: record.employee_name,
-          full_name: record.user_name || record.full_name || record.employee_name,
-          department: record.department || 'Not Specified',
-          date: record.date,
-          // Format check-in time for display (extract only the time portion)
-          checkin_time: record.checkin_time ? new Date(record.checkin_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : null,
-          // Format check-out time for display (extract only the time portion)
-          checkout_time: record.checkout_time ? new Date(record.checkout_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : null,
-          working_hours: record.working_hours || 0,
-          status: record.status,
-          location: record.location || record.location_name || 'Office',
-          notes: record.notes || '',
-          geo_lat: record.geo_lat,
-          geo_long: record.geo_long
-        };
-      });
+      employeeScores[record.user_id].total++;
       
-      setAttendanceRecords(processedData);
-      
-      // Calculate statistics
-      setStats({
-        totalPresent: processedData.filter(r => r.status === 'present').length,
-        totalAbsent: processedData.filter(r => r.status === 'absent').length,
-        totalLate: processedData.filter(r => 
-          r.status === 'present' && 
-          r.checkin_time && 
-          r.checkin_time > '09:00:00'
-        ).length,
-        attendanceRate: processedData.length > 0 
-          ? Math.round((processedData.filter(r => r.status === 'present').length / processedData.length) * 100) 
-          : 0
-      });
-    } catch (error) {
-      console.error('Error fetching attendance data:', error);
-      // Show empty data on error
-      setAttendanceRecords([]);
-      setStats({
-        totalPresent: 0,
-        totalAbsent: 0,
-        totalLate: 0,
-        attendanceRate: 0
-      });
-      
-      // Display a user-friendly error message 
-      const errorMessage = error.message === 'Authentication token not found. Please log in again.' ?
-        'Authentication token not found. Please log in again.' :
-        'Failed to load attendance data. Please check your connection and try again.';
-      
-      alert(errorMessage);
-    } finally {
-      setLoading(false);
-    }
+      if (record.check_in) {
+        const [hours, minutes] = record.check_in.split(':').map(Number);
+        if (hours < 9 || (hours === 9 && minutes <= 30)) {
+          employeeScores[record.user_id].onTime++;
+        }
+      }
+    });
+    
+    return Object.entries(employeeScores)
+      .map(([userId, data]) => ({
+        userId,
+        name: data.name || employees.find(e => (e.id || e._id) === userId)?.full_name || 'Unknown',
+        onTimePercentage: ((data.onTime / data.total) * 100).toFixed(1),
+        onTime: data.onTime,
+        total: data.total
+      }))
+      .filter(emp => emp.total >= 5) // At least 5 days
+      .sort((a, b) => b.onTimePercentage - a.onTimePercentage)
+      .slice(0, 5); // Top 5
   };
 
-  const markAttendance = async (employeeId, status) => {
-    try {
-      // Use the utility function to mark attendance
-      await apiMarkAttendance({
-        user_id: employeeId,
-        status: status,
-        notes: `Manually marked as ${status} by admin/HR`
-      });
+  const getFrequentAbsentees = () => {
+    const employeeAbsences = {};
+    const records = getAttendanceByTimeRange();
+    
+    records.forEach(record => {
+      if (record.status === 'absent') {
+        if (!employeeAbsences[record.user_id]) {
+          employeeAbsences[record.user_id] = {
+            name: record.user_name,
+            absences: 0,
+            total: 0
+          };
+        }
+        employeeAbsences[record.user_id].absences++;
+      }
       
-      // Success message
-      alert('Attendance marked successfully');
-      fetchAttendanceData(); // Refresh data
-    } catch (error) {
-      console.error('Error marking attendance:', error);
-      alert(`Error: ${error.message}`);
-    }
-  };
-  
-  const editAttendanceRecord = async (recordId, updatedData) => {
-    try {
-      console.log('Updating attendance record:', recordId, updatedData); // Debugging
-      
-      // Add user context to the update data
-      const updateDataWithContext = {
-        ...updatedData,
-        updated_by: currentUser?.user_id || currentUser?.username || 'admin',
-        updated_by_name: currentUser?.full_name || currentUser?.name || 'Administrator',
-        current_user_roles: ['admin', 'hr'] // Required by some endpoints
-      };
-      
-      // Use the utility function to edit attendance record
-      await apiEditAttendanceRecord(recordId, updateDataWithContext);
-      
-      // Success message
-      alert('Attendance record updated successfully');
-      fetchAttendanceData(); // Refresh data
-    } catch (error) {
-      console.error('Error updating attendance:', error);
-      alert(`Error: ${error.message}`);
-    }
-  };
-  
-  const createManualAttendance = async (data) => {
-    try {
-      console.log('Creating attendance record:', data); // Debugging
-      
-      // Use the utility function to create manual attendance
-      await apiCreateManualAttendance(data);
-      
-      // Success message
-      alert('Attendance record created successfully');
-      fetchAttendanceData(); // Refresh data
-    } catch (error) {
-      console.error('Error creating attendance record:', error);
-      alert(`Error: ${error.message}`);
-    }
+      if (employeeAbsences[record.user_id]) {
+        employeeAbsences[record.user_id].total++;
+      }
+    });
+    
+    return Object.entries(employeeAbsences)
+      .map(([userId, data]) => ({
+        userId,
+        name: data.name || employees.find(e => (e.id || e._id) === userId)?.full_name || 'Unknown',
+        absences: data.absences,
+        absenceRate: ((data.absences / data.total) * 100).toFixed(1)
+      }))
+      .filter(emp => emp.absences >= 2) // At least 2 absences
+      .sort((a, b) => b.absences - a.absences)
+      .slice(0, 5); // Top 5
   };
 
-  // Check-in function for regular users
-  const handleCheckIn = async () => {
-    if (!currentUser || !location.latitude) {
-      alert('Location is required for check-in. Please enable location services.');
-      return;
-    }
-    try {
-      const now = new Date();
-      const checkInData = {
-        employee_id: currentUser.employee_id || currentUser.user_id || currentUser.id || currentUser.username,
-        status: 'present',
-        date: now.toISOString().split('T')[0],           // YYYY-MM-DD
-        checkintime: now.toISOString(),                  // ISO string
-        geo_lat: location.latitude,                      // use geo_lat and geo_long if your backend expects these names
-        geo_long: location.longitude,
-        location: location.address || `${location.latitude},${location.longitude}`,
-        notes: 'Self check-in'
-      };
-      console.log("Check-in payload:", checkInData);
-      await apiMarkAttendance(checkInData);              // must match backend model
-      alert('Checked in successfully!');
-      await fetchUserAttendance();
-      // Extra debug
-      console.log("Updated todayAttendance after check-in:", todayAttendance);
-    } catch (error) {
-      console.error('Error checking in:', error);
-      alert('Check-in failed: ' + error.message);
-    }
-  };
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+      </div>
+    );
+  }
 
-  // Check-out function for regular users
-  const handleCheckOut = async () => {
-    if (!currentUser || !todayAttendance) {
-      alert('No check-in record found for today.');
-      return;
-    }
-    if (!location.latitude) {
-      alert('Location is required for check-out. Please enable location services.');
-      return;
-    }
-    try {
-      const now = new Date();
-      const checkOutData = {
-        checkouttime: now.toISOString(),
-        geo_lat: location.latitude,              // use same key as backend expects
-        geo_long: location.longitude,
-        location: location.address || `${location.latitude},${location.longitude}`,
-        notes: todayAttendance.notes ? todayAttendance.notes + ' Self check-out' : 'Self check-out'
-      };
-      console.log("Check-out payload:", checkOutData);
-      await apiEditAttendanceRecord(todayAttendance.attendance_id, checkOutData);
-      alert('Checked out successfully!');
-      await fetchUserAttendance();
-      // Extra debug
-      console.log("Updated todayAttendance after check-out:", todayAttendance);
-    } catch (error) {
-      console.error('Error checking out:', error);
-      alert('Check-out failed: ' + error.message);
-    }
-  };
+  const filteredAttendance = getFilteredAttendance();
+  const alerts = getAlerts();
+  // Prefer server-provided summary when available, otherwise compute from client data
+  const attendanceSummary = attendanceSummaryServer || getAttendanceSummary();
+  const deptWiseData = getDepartmentWiseAttendance();
+  const lateArrivalsTrend = getLateArrivalsTrend();
+  const earlyLeavesTrend = getEarlyLeavesTrend();
+  const topPunctual = getTopPunctualEmployees();
+  const frequentAbsentees = getFrequentAbsentees();
 
   return (
-    <div className="space-y-6">
-      {/* Show loading while determining user role */}
-      {!userRole && (
-        <div className="text-center py-10">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      )}
-
-      {/* Admin View - Full Attendance Management */}
-      {userRole === 'admin' && (
-        <>
-          {/* Header */}
-          <div className="flex justify-between items-center">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6 lg:p-8">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
+        <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Attendance Management</h2>
-              <p className="text-gray-600">Track and manage employee attendance</p>
+              <h1 className="text-3xl font-bold text-gray-900 flex items-center">
+                <i className="fas fa-users-cog text-indigo-600 mr-3"></i>
+                HR Attendance Dashboard
+              </h1>
+              <p className="text-gray-600 mt-2">Manage and monitor employee attendance</p>
             </div>
-            <div className="flex space-x-3">
-              <button 
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
-                onClick={() => {
-                  setModalType('create');
-                  setFormData({
-                    user_id: '',
-                    employee_name: '',
-                    date: new Date().toISOString().split('T')[0],
-                    status: 'present',
-                    checkin_time: '09:00',
-                    checkout_time: '17:00',
-                    notes: ''
-                  });
-                  setShowModal(true);
-                }}
+            <div className="flex gap-3">
+              <button
+                onClick={handleMarkAttendance}
+                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center gap-2"
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Manual Entry
+                <i className="fas fa-calendar-plus"></i>
+                Mark Attendance
               </button>
-          <button 
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center"
-            onClick={() => {
-              // Create CSV content with updated headers
-              const headers = 'User ID,Employee Name,Role,Department,Date,Check In,Check Out,Working Hours,Status,Location,Notes\n';
-              const csvContent = attendanceRecords.map(record => 
-                `"${record.user_id || record.employee_id || ''}","${record.full_name || record.employee_name || record.name || ''}","${record.role || record.position || record.roles?.[0] || 'Employee'}","${record.department || 'Not Specified'}","${record.date}","${record.checkin_time || ''}","${record.checkout_time || ''}",${record.working_hours || '0'},"${record.status}","${record.location || ''}","${record.notes || ''}"`
-              ).join('\n');
-              
-              // Create blob and download link
-              const blob = new Blob([headers + csvContent], { type: 'text/csv' });
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.setAttribute('hidden', '');
-              a.setAttribute('href', url);
-              a.setAttribute('download', `attendance-report-${new Date().toISOString().slice(0,10)}.csv`);
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-            }}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export Report
-          </button>
-        </div>
-      </div>
+              <button
+                onClick={exportToCSV}
+                className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center gap-2"
+              >
+                <i className="fas fa-file-export"></i>
+                Export Report
+              </button>
+            </div>
+          </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-green-100">
-              <CheckCircle className="w-6 h-6 text-green-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Present Today</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalPresent}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-red-100">
-              <XCircle className="w-6 h-6 text-red-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Absent Today</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalAbsent}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-yellow-100">
-              <Clock className="w-6 h-6 text-yellow-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Late Arrivals</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalLate}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-blue-100">
-              <Calendar className="w-6 h-6 text-blue-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Attendance Rate</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.attendanceRate}%</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-            <input
-              type="date"
-              value={filters.date}
-              onChange={(e) => setFilters(prev => ({ ...prev, date: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-            <select
-              value={filters.department}
-              onChange={(e) => setFilters(prev => ({ ...prev, department: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          {/* View Toggle Buttons */}
+          <div className="mb-6 flex gap-2">
+            <button
+              onClick={() => setViewType('table')}
+              className={`px-6 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 ${
+                viewType === 'table'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
-              <option value="">All Departments</option>
-              {hrConstants.DEPARTMENTS.map(dept => (
-                <option key={dept.value} value={dept.value}>{dept.label}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Employee</label>
-            <input
-              type="text"
-              placeholder="Search employee..."
-              value={filters.employee}
-              onChange={(e) => setFilters(prev => ({ ...prev, employee: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              <i className="fas fa-table"></i>
+              Table View
+            </button>
+            <button
+              onClick={() => setViewType('analytics')}
+              className={`px-6 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 ${
+                viewType === 'analytics'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
-              <option value="all">All Status</option>
-              {hrConstants.ATTENDANCE_STATUS.map(status => (
-                <option key={status.value} value={status.value}>{status.label}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="flex items-end">
-            <button 
-              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-              onClick={() => fetchAttendanceData()}
-            >
-              Apply Filters
+              <i className="fas fa-chart-bar"></i>
+              Analytics & Reports
             </button>
           </div>
-        </div>
-      </div>
 
-      {/* Attendance Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Attendance Records</h3>
-        </div>
-        
-        <div className="overflow-x-auto">
-          {!localStorage.getItem('token') && !window.sessionStorage.getItem('token') ? (
-            <div className="p-10 text-center">
-              <p className="text-red-600 font-semibold mb-2">Authentication Required</p>
-              <p className="text-gray-600">Please log in to view attendance records.</p>
-            </div>
-          ) : loading ? (
-            <div className="p-10 text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
-              <p className="text-gray-600">Loading attendance records...</p>
-            </div>
-          ) : attendanceRecords.length === 0 ? (
-            <div className="p-10 text-center">
-              <p className="text-gray-600">No attendance records found for the selected filters.</p>
-            </div>
-          ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  User ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Employee Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Role
-                </th>
-                {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Department
-                </th> */}
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Check In
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Check Out
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Working Hours
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {attendanceRecords.map((record) => (
-                <tr key={record.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <div className="flex items-center">
-                      <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center border-2 border-blue-200 mr-2">
-                        <span className="text-xs font-semibold text-blue-700">
-                          {(record.user_id || record.employee_id || '??').slice(0, 1)}
-                        </span>
-                      </div>
-                      <span className="font-medium text-blue-600">
-                        {record.user_id || record.employee_id || '-'}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {record.full_name || record.user_name || record.employee_name || record.name || 'Unknown Employee'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                      {record.role || record.position || record.roles?.[0] || 'Employee'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {record.checkin_time || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {record.checkout_time || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {record.working_hours ? `${record.working_hours}h` : '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      record.status === 'present' 
-                        ? 'bg-green-100 text-green-800'
-                        : record.status === 'absent'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {record.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex space-x-2">
-                      <button 
-                        className="text-blue-600 hover:text-blue-800"
-                        onClick={() => alert(`Details for ${record.employee_name}: ${record.notes || 'No additional notes'}`)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button 
-                        className="text-green-600 hover:text-green-800"
-                        onClick={() => {
-                          setCurrentRecord(record);
-                          setModalType('edit');
-                          // For edit mode, we need to convert times back to HH:MM format for the time inputs
-                          const checkinParts = record.checkin_time ? record.checkin_time.split(':') : ['09', '00'];
-                          const checkoutParts = record.checkout_time ? record.checkout_time.split(':') : ['17', '00'];
-                          const checkinTime = `${checkinParts[0].padStart(2, '0')}:${checkinParts[1].padStart(2, '0')}`;
-                          const checkoutTime = `${checkoutParts[0].padStart(2, '0')}:${checkoutParts[1].padStart(2, '0')}`;
-                          setFormData({
-                            user_id: record.user_id,
-                            employee_name: record.full_name || record.employee_name || record.name || 'Unknown Employee',
-                            date: record.date,
-                            status: record.status,
-                            checkin_time: checkinTime,
-                            checkout_time: checkoutTime,
-                            notes: record.notes || ''
-                          });
-                          setShowModal(true);
-                        }}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          )}
-        </div>
-      </div>
-      </>
-      )}
-      
-      {/* Modal for Creating/Editing Attendance - Admin Only */}
-      {showModal && userRole === 'admin' && (
-        <div className="fixed inset-0 bg-black bg-opacity-25 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-lg mx-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                {modalType === 'create' ? 'Manual Attendance Entry' : 'Edit Attendance Record'}
-              </h3>
-              <button 
-                className="text-gray-500 hover:text-gray-700"
-                onClick={() => setShowModal(false)}
-              >
-                <X className="w-5 h-5" />
-              </button>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-green-700 font-medium">Present Today</p>
+                  <p className="text-2xl font-bold text-green-900 mt-1">{stats.totalPresent}</p>
+                </div>
+                <i className="fas fa-user-check text-3xl text-green-500"></i>
+              </div>
             </div>
             
-            <div className="space-y-4">
-              {/* Employee Selection */}
-              {modalType === 'create' && (
+            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
+              <div className="flex items-center justify-between">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Select Employee</label>
-                  <select
-                    value={formData.user_id}
-                    onChange={(e) => {
-                      const selectedEmployee = employees.find(emp => 
-                        (emp.user_id && emp.user_id === e.target.value) || 
-                        (emp.username && emp.username === e.target.value) ||
-                        (emp.id && emp.id === e.target.value)
-                      );
-                      setFormData({
-                        ...formData,
-                        user_id: e.target.value,
-                        employee_name: selectedEmployee ? (selectedEmployee.name || selectedEmployee.full_name) : ''
-                      });
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select an employee</option>
-                    {Array.isArray(employees) ? employees.map(emp => (
-                      <option
-                        key={emp.id || emp.user_id || Math.random()}
-                        value={emp.user_id || emp.username || emp.id}
-                      >
-                        {emp.name || emp.full_name || emp.email || "Employee"}
-                      </option>
-                    )) : <option value="">No employees found</option>}
-                  </select>
+                  <p className="text-sm text-red-700 font-medium">Absent Today</p>
+                  <p className="text-2xl font-bold text-red-900 mt-1">{stats.totalAbsent}</p>
                 </div>
-              )}
-              
-              {/* Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData({...formData, date: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
+                <i className="fas fa-user-times text-3xl text-red-500"></i>
               </div>
-              
-              {/* Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({...formData, status: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  {hrConstants.ATTENDANCE_STATUS.map(status => (
-                    <option key={status.value} value={status.value}>{status.label}</option>
-                  ))}
-                </select>
+            </div>
+            
+            <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-4 border border-yellow-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-yellow-700 font-medium">Late Entries</p>
+                  <p className="text-2xl font-bold text-yellow-900 mt-1">{stats.lateEntries}</p>
+                </div>
+                <i className="fas fa-clock text-3xl text-yellow-500"></i>
               </div>
-              
-              {/* Check In Time */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Check In Time</label>
-                <input
-                  type="time"
-                  value={formData.checkin_time}
-                  onChange={(e) => setFormData({...formData, checkin_time: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  disabled={formData.status === 'absent' || formData.status === 'leave'}
-                />
+            </div>
+            
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-blue-700 font-medium">On Leave</p>
+                  <p className="text-2xl font-bold text-blue-900 mt-1">{stats.onLeave}</p>
+                </div>
+                <i className="fas fa-calendar-check text-3xl text-green-500"></i>
               </div>
-              
-              {/* Check Out Time */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Check Out Time</label>
-                <input
-                  type="time"
-                  value={formData.checkout_time}
-                  onChange={(e) => setFormData({...formData, checkout_time: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  disabled={formData.status === 'absent' || formData.status === 'leave'}
-                />
+            </div>
+            
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-orange-700 font-medium">Half Day</p>
+                  <p className="text-2xl font-bold text-orange-900 mt-1">{stats.halfDay}</p>
+                </div>
+                <i className="fas fa-user-clock text-3xl text-orange-500"></i>
               </div>
-              
-              {/* Notes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                  placeholder="Add any relevant notes here..."
-                ></textarea>
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
-                  onClick={() => setShowModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  onClick={async () => {
-                    try {
-                      // Format data for API
-                      const submitData = {
-                        user_id: formData.user_id,
-                        employee_name: formData.employee_name,
-                        date: formData.date,
-                        status: formData.status,
-                        notes: formData.notes,
-                        location: "Office Location (Manager Action)",
-                        location_name: "Office Location (Manager Action)",
-                        geo_lat: 28.628747,
-                        geo_long: 77.381403
-                      };
-
-                      // Add time fields if status is present
-                      if (formData.status === 'present') {
-                        // Convert times to ISO format
-                        const dateObj = new Date(formData.date);
-                        const checkInDateStr = `${formData.date}T${formData.checkin_time}:00`;
-                        const checkOutDateStr = formData.checkout_time ? `${formData.date}T${formData.checkout_time}:00` : null;
-                        
-                        submitData.checkin_time = checkInDateStr;
-                        submitData.checkout_time = checkOutDateStr;
-                        
-                        // Calculate working hours if checkout time is provided
-                        if (checkOutDateStr) {
-                          const checkInTime = new Date(checkInDateStr).getTime();
-                          const checkOutTime = new Date(checkOutDateStr).getTime();
-                          const diffHours = (checkOutTime - checkInTime) / (1000 * 60 * 60);
-                          submitData.working_hours = Math.round(diffHours * 100) / 100;
-                        } else {
-                          submitData.working_hours = 0;
-                        }
-                        
-                        // Add checkout location if checkout time exists
-                        if (checkOutDateStr) {
-                          submitData.checkout_geo_lat = 28.628747;
-                          submitData.checkout_geo_long = 77.381403;
-                          submitData.checkout_location = "Office Location (Manager Action)";
-                        }
-                      }
-
-                      if (modalType === 'create') {
-                        await createManualAttendance(submitData);
-                      } else {
-                        await editAttendanceRecord(currentRecord.id, submitData);
-                      }
-                      
-                      setShowModal(false);
-                      fetchAttendanceData(); // Refresh data after update
-                    } catch (error) {
-                      console.error('Error saving attendance:', error);
-                      alert(`Error: ${error.message}`);
-                    }
-                  }}
-                >
-                  {modalType === 'create' ? 'Create' : 'Update'}
-                </button>
+            </div>
+            
+            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-4 border border-indigo-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-indigo-700 font-medium">Attendance %</p>
+                  <p className="text-2xl font-bold text-indigo-900 mt-1">{stats.attendancePercentage}%</p>
+                </div>
+                <i className="fas fa-chart-pie text-3xl text-indigo-500"></i>
               </div>
             </div>
           </div>
         </div>
+      </motion.div>
+
+      {/* Alerts Section */}
+      <AnimatePresence>
+        {alerts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mb-6 space-y-3"
+          >
+            {alerts.map((alert, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className={`p-4 rounded-lg border-l-4 flex items-start gap-3 ${
+                  alert.type === 'warning' 
+                    ? 'bg-yellow-50 border-yellow-500' 
+                    : 'bg-red-50 border-red-500'
+                }`}
+              >
+                <i className={`fas fa-${alert.icon} text-xl ${
+                  alert.type === 'warning' ? 'text-yellow-600' : 'text-red-600'
+                }`}></i>
+                <div className="flex-1">
+                  <p className={`font-semibold ${
+                    alert.type === 'warning' ? 'text-yellow-800' : 'text-red-800'
+                  }`}>
+                    {alert.type === 'warning' ? 'Warning' : 'Alert'}
+                  </p>
+                  <p className={`text-sm mt-1 ${
+                    alert.type === 'warning' ? 'text-yellow-700' : 'text-red-700'
+                  }`}>
+                    {alert.message}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {viewType === 'analytics' ? (
+        /* Analytics & Reports View */
+        <>
+          {/* Time Range Selector */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-white rounded-2xl shadow-lg p-6 mb-6"
+          >
+            <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+              <i className="fas fa-calendar-alt text-indigo-600 mr-2"></i>
+              Time Range
+            </h2>
+            <div className="flex gap-2">
+              {['daily', 'weekly', 'monthly'].map(range => (
+                <button
+                  key={range}
+                  onClick={() => setAnalyticsTimeRange(range)}
+                  className={`px-6 py-2 rounded-lg font-semibold transition-all duration-200 capitalize ${
+                    analyticsTimeRange === range
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {range}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Attendance Summary Cards */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white rounded-2xl shadow-lg p-6 mb-6"
+          >
+            <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+              <i className="fas fa-chart-pie text-indigo-600 mr-2"></i>
+              Attendance Summary ({analyticsTimeRange})
+            </h2>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
+                <div className="flex items-center justify-between mb-2">
+                  <i className="fas fa-user-check text-3xl text-green-500"></i>
+                  <span className="text-2xl font-bold text-green-900">{attendanceSummary.present}</span>
+                </div>
+                <p className="text-sm font-medium text-green-700">Total Present</p>
+                <p className="text-xs text-green-600 mt-1">
+                  {attendanceSummary.total > 0 ? ((attendanceSummary.present / attendanceSummary.total) * 100).toFixed(1) : 0}% of total
+                </p>
+              </div>
+              
+              <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-6 border border-red-200">
+                <div className="flex items-center justify-between mb-2">
+                  <i className="fas fa-user-times text-3xl text-red-500"></i>
+                  <span className="text-2xl font-bold text-red-900">{attendanceSummary.absent}</span>
+                </div>
+                <p className="text-sm font-medium text-red-700">Total Absent</p>
+                <p className="text-xs text-red-600 mt-1">
+                  {attendanceSummary.total > 0 ? ((attendanceSummary.absent / attendanceSummary.total) * 100).toFixed(1) : 0}% of total
+                </p>
+              </div>
+              
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+                <div className="flex items-center justify-between mb-2">
+                  <i className="fas fa-calendar-check text-3xl text-green-500ext-3xl text-blue-500"></i>
+                  <span className="text-2xl font-bold text-blue-900">{attendanceSummary.leave}</span>
+                </div>
+                <p className="text-sm font-medium text-blue-700">On Leave</p>
+                <p className="text-xs text-blue-600 mt-1">
+                  {attendanceSummary.total > 0 ? ((attendanceSummary.leave / attendanceSummary.total) * 100).toFixed(1) : 0}% of total
+                </p>
+              </div>
+              
+              <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-6 border border-yellow-200">
+                <div className="flex items-center justify-between mb-2">
+                  <i className="fas fa-user-clock text-3xl text-yellow-500"></i>
+                  <span className="text-2xl font-bold text-yellow-900">{attendanceSummary.halfDay}</span>
+                </div>
+                <p className="text-sm font-medium text-yellow-700">Half Day</p>
+                <p className="text-xs text-yellow-600 mt-1">
+                  {attendanceSummary.total > 0 ? ((attendanceSummary.halfDay / attendanceSummary.total) * 100).toFixed(1) : 0}% of total
+                </p>
+              </div>
+            </div>
+            
+            {/* Visual Bar Chart */}
+            <div className="mt-6">
+              <div className="flex items-center gap-2 h-8 rounded-lg overflow-hidden">
+                <div 
+                  className="bg-green-500 h-full flex items-center justify-center text-white text-xs font-semibold"
+                  style={{ width: `${attendanceSummary.total > 0 ? (attendanceSummary.present / attendanceSummary.total) * 100 : 0}%` }}
+                >
+                  {attendanceSummary.present > 0 && `${attendanceSummary.present}`}
+                </div>
+                <div 
+                  className="bg-red-500 h-full flex items-center justify-center text-white text-xs font-semibold"
+                  style={{ width: `${attendanceSummary.total > 0 ? (attendanceSummary.absent / attendanceSummary.total) * 100 : 0}%` }}
+                >
+                  {attendanceSummary.absent > 0 && `${attendanceSummary.absent}`}
+                </div>
+                <div 
+                  className="bg-blue-500 h-full flex items-center justify-center text-white text-xs font-semibold"
+                  style={{ width: `${attendanceSummary.total > 0 ? (attendanceSummary.leave / attendanceSummary.total) * 100 : 0}%` }}
+                >
+                  {attendanceSummary.leave > 0 && `${attendanceSummary.leave}`}
+                </div>
+                <div 
+                  className="bg-yellow-500 h-full flex items-center justify-center text-white text-xs font-semibold"
+                  style={{ width: `${attendanceSummary.total > 0 ? (attendanceSummary.halfDay / attendanceSummary.total) * 100 : 0}%` }}
+                >
+                  {attendanceSummary.halfDay > 0 && `${attendanceSummary.halfDay}`}
+                </div>
+              </div>
+              <div className="flex justify-between mt-2 text-xs text-gray-500">
+                <span>Total Records: {attendanceSummary.total}</span>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Department-wise Attendance */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white rounded-2xl shadow-lg p-6 mb-6"
+          >
+            <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+              <i className="fas fa-building text-indigo-600 mr-2"></i>
+              Department-wise Attendance
+            </h2>
+            
+            <div className="space-y-4">
+              {Object.entries(deptWiseData).map(([dept, data], index) => (
+                <div key={dept} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-900">{dept}</h3>
+                    <span className="text-sm text-gray-600">Total: {data.total}</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-3 mb-3">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-green-600">{data.present}</p>
+                      <p className="text-xs text-gray-600">Present</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-red-600">{data.absent}</p>
+                      <p className="text-xs text-gray-600">Absent</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-blue-600">{data.leave}</p>
+                      <p className="text-xs text-gray-600">Leave</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-1 h-4 rounded overflow-hidden">
+                    <div 
+                      className="bg-green-400 h-full"
+                      style={{ width: `${data.total > 0 ? (data.present / data.total) * 100 : 0}%` }}
+                    />
+                    <div 
+                      className="bg-red-400 h-full"
+                      style={{ width: `${data.total > 0 ? (data.absent / data.total) * 100 : 0}%` }}
+                    />
+                    <div 
+                      className="bg-blue-400 h-full"
+                      style={{ width: `${data.total > 0 ? (data.leave / data.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {/* Late Arrivals Trend */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white rounded-2xl shadow-lg p-6"
+            >
+              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                <i className="fas fa-clock text-yellow-600 mr-2"></i>
+                Late Arrivals Trend (Last 7 Days)
+              </h2>
+              
+              <div className="space-y-3">
+                {lateArrivalsTrend.length > 0 ? (
+                  lateArrivalsTrend.map(([date, count]) => (
+                    <div key={date} className="flex items-center gap-3">
+                      <span className="text-sm text-gray-600 w-24">{formatDate(date)}</span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-8 overflow-hidden">
+                        <div 
+                          className="bg-yellow-500 h-full flex items-center justify-end pr-3 text-white text-sm font-semibold transition-all duration-500"
+                          style={{ width: `${Math.min((count / Math.max(...lateArrivalsTrend.map(d => d[1]))) * 100, 100)}%` }}
+                        >
+                          {count}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 py-8">No late arrivals in this period</p>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Early Leaves Trend */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="bg-white rounded-2xl shadow-lg p-6"
+            >
+              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                <i className="fas fa-sign-out-alt text-orange-600 mr-2"></i>
+                Early Leaves Trend (Last 7 Days)
+              </h2>
+              
+              <div className="space-y-3">
+                {earlyLeavesTrend.length > 0 ? (
+                  earlyLeavesTrend.map(([date, count]) => (
+                    <div key={date} className="flex items-center gap-3">
+                      <span className="text-sm text-gray-600 w-24">{formatDate(date)}</span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-8 overflow-hidden">
+                        <div 
+                          className="bg-orange-500 h-full flex items-center justify-end pr-3 text-white text-sm font-semibold transition-all duration-500"
+                          style={{ width: `${Math.min((count / Math.max(...earlyLeavesTrend.map(d => d[1]))) * 100, 100)}%` }}
+                        >
+                          {count}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 py-8">No early leaves in this period</p>
+                )}
+              </div>
+            </motion.div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {/* Top Punctual Employees */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="bg-white rounded-2xl shadow-lg p-6"
+            >
+              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                <i className="fas fa-trophy text-yellow-500 mr-2"></i>
+                Top Punctual Employees
+              </h2>
+              
+              <div className="space-y-3">
+                {topPunctual.length > 0 ? (
+                  topPunctual.map((employee, index) => (
+                    <div key={employee.userId} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                        index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-orange-600' : 'bg-blue-500'
+                      }`}>
+                        {index + 1}
+                      </div>
+                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-semibold">
+                        {employee.name.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{employee.name}</p>
+                        <p className="text-xs text-gray-600">{employee.onTime} on-time / {employee.total} days</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-green-600">{employee.onTimePercentage}%</p>
+                        <p className="text-xs text-gray-500">On-time</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 py-8">No data available</p>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Frequent Absentees */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
+              className="bg-white rounded-2xl shadow-lg p-6"
+            >
+              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                <i className="fas fa-exclamation-triangle text-red-600 mr-2"></i>
+                Employees with Frequent Absences
+              </h2>
+              
+              <div className="space-y-3">
+                {frequentAbsentees.length > 0 ? (
+                  frequentAbsentees.map((employee, index) => (
+                    <div key={employee.userId} className="flex items-center gap-3 p-3 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
+                      <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                        {index + 1}
+                      </div>
+                      <div className="w-10 h-10 bg-red-200 rounded-full flex items-center justify-center text-red-600 font-semibold">
+                        {employee.name.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{employee.name}</p>
+                        <p className="text-xs text-gray-600">{employee.absences} absences</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-red-600">{employee.absenceRate}%</p>
+                        <p className="text-xs text-gray-500">Absence Rate</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 py-8">No frequent absences found</p>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        </>
+      ) : (
+        <>
+      {/* Filters Section */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.1 }}
+        className="bg-white rounded-2xl shadow-lg p-6 mb-6"
+      >
+        <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+          <i className="fas fa-filter text-indigo-600 mr-2"></i>
+          Filters
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+            <select
+              value={selectedDepartment}
+              onChange={(e) => setSelectedDepartment(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            >
+              <option value="all">All Departments</option>
+              {departments.map(dept => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Employee</label>
+            <select
+              value={selectedEmployee}
+              onChange={(e) => setSelectedEmployee(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            >
+              <option value="all">All Employees</option>
+              {employees.map(emp => (
+                <option key={emp.id || emp._id} value={emp.id || emp._id}>
+                  {emp.full_name || emp.username}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            >
+              <option value="all">All Status</option>
+              <option value="present">Present</option>
+              <option value="absent">Absent</option>
+              <option value="half_day">Half Day</option>
+              <option value="leave">On Leave</option>
+            </select>
+          </div>
+        </div>
+        
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={() => {
+              setSelectedDepartment('all');
+              setSelectedEmployee('all');
+              setStartDate('');
+              setEndDate('');
+              setStatusFilter('all');
+            }}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+          >
+            <i className="fas fa-redo mr-2"></i>
+            Reset Filters
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Attendance Table */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2 }}
+        className="bg-white rounded-2xl shadow-lg overflow-hidden"
+      >
+        <div className="p-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center justify-between">
+            <span>
+              <i className="fas fa-table text-indigo-600 mr-2"></i>
+              Attendance Records ({filteredAttendance.length})
+            </span>
+          </h2>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Employee</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Department</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Check In</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Check Out</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Working Hours</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredAttendance.length > 0 ? (
+                  filteredAttendance.map((record, index) => {
+                    const employee = employees.find(emp => (emp.id || emp._id || emp.user_id) === record.user_id);
+                    return (
+                      <motion.tr
+                        key={record._id || index}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: index * 0.02 }}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {formatDate(record.date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-semibold text-sm mr-2">
+                              {(record.employee_name || employee?.full_name || employee?.username || 'U').charAt(0)}
+                            </div>
+                            <span className="text-sm text-gray-900">
+                              {record.employee_name || record.user_name || employee?.full_name || employee?.username || 'N/A'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {employee?.department || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {formatTime(record.check_in)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {formatTime(record.check_out)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {record.working_hours ? `${record.working_hours} hrs` : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStatusBadge(record.status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleViewProfile(record.user_id)}
+                              className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
+                              title="View Profile"
+                            >
+                              <i className="fas fa-user"></i>
+                            </button>
+                            <button
+                              onClick={() => handleEditAttendance(record)}
+                              className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors text-sm font-medium"
+                              title="Edit Attendance"
+                            >
+                              <i className="fas fa-edit"></i>
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="8" className="px-6 py-12 text-center">
+                      <i className="fas fa-inbox text-5xl text-gray-300 mb-3"></i>
+                      <p className="text-gray-500 font-medium">No attendance records found</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Leave Requests Section */}
+      {leaveRequests.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white rounded-2xl shadow-lg p-6 mt-6"
+        >
+          <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+            <i className="fas fa-clipboard-list text-indigo-600 mr-2"></i>
+            Pending Leave Requests ({leaveRequests.filter(r => r.status === 'pending').length})
+          </h2>
+          
+          <div className="space-y-3">
+            {leaveRequests.filter(r => r.status === 'pending').map((leave, index) => (
+              <motion.div
+                key={leave._id || index}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold">
+                        {(leave.user_name || 'U').charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">{leave.user_name || 'Employee'}</p>
+                        <p className="text-sm text-gray-500">{leave.leave_type || 'Leave Request'}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+                      <div>
+                        <i className="fas fa-calendar mr-2 text-gray-400"></i>
+                        {formatDate(leave.start_date)} - {formatDate(leave.end_date)}
+                      </div>
+                      <div>
+                        <i className="fas fa-clock mr-2 text-gray-400"></i>
+                        {leave.days || 0} days
+                      </div>
+                    </div>
+                    {leave.reason && (
+                      <p className="text-sm text-gray-600 mt-2 italic">
+                        <i className="fas fa-comment-alt mr-2 text-gray-400"></i>
+                        {leave.reason}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleLeaveAction(leave._id, 'approve')}
+                      className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors font-medium"
+                    >
+                      <i className="fas fa-check mr-1"></i>
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleLeaveAction(leave._id, 'reject')}
+                      className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors font-medium"
+                    >
+                      <i className="fas fa-times mr-1"></i>
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Edit Attendance Modal */}
+      <AnimatePresence>
+        {showEditModal && selectedRecord && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowEditModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 sm:p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900">Edit Attendance</h2>
+                  <button
+                    onClick={() => setShowEditModal(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <i className="fas fa-times text-2xl"></i>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
+                    <input
+                      type="date"
+                      value={editForm.date}
+                      onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Check In Time</label>
+                      <input
+                        type="time"
+                        value={editForm.check_in}
+                        onChange={(e) => setEditForm({ ...editForm, check_in: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Check Out Time</label>
+                      <input
+                        type="time"
+                        value={editForm.check_out}
+                        onChange={(e) => setEditForm({ ...editForm, check_out: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
+                      <select
+                        value={editForm.status}
+                        onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      >
+                        <option value="present">Present</option>
+                        <option value="absent">Absent</option>
+                        <option value="half_day">Half Day</option>
+                        <option value="leave">On Leave</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Working Hours</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={editForm.working_hours}
+                        onChange={(e) => setEditForm({ ...editForm, working_hours: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        placeholder="e.g., 8.5"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Notes</label>
+                    <textarea
+                      value={editForm.notes}
+                      onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                      rows="3"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                      placeholder="Add any notes or remarks..."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-4 mt-6">
+                  <button
+                    onClick={() => setShowEditModal(false)}
+                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-all duration-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitEditAttendance}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl"
+                  >
+                    <i className="fas fa-save mr-2"></i>
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Mark Attendance Modal */}
+      <AnimatePresence>
+        {showMarkAttendanceModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowMarkAttendanceModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 sm:p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900">Mark Attendance Manually</h2>
+                  <button
+                    onClick={() => setShowMarkAttendanceModal(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <i className="fas fa-times text-2xl"></i>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Select Employee <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={markAttendanceForm.user_id}
+                      onChange={(e) => setMarkAttendanceForm({ ...markAttendanceForm, user_id: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Choose an employee...</option>
+                      {employees.map(emp => (
+                        <option key={emp.id || emp._id} value={emp.id || emp._id || emp.user_id}>
+                          {emp.full_name || emp.username}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
+                      <input
+                        type="date"
+                        value={markAttendanceForm.date}
+                        onChange={(e) => setMarkAttendanceForm({ ...markAttendanceForm, date: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
+                      <select
+                        value={markAttendanceForm.status}
+                        onChange={(e) => setMarkAttendanceForm({ ...markAttendanceForm, status: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      >
+                        <option value="present">Present</option>
+                        <option value="absent">Absent</option>
+                        <option value="half_day">Half Day</option>
+                        <option value="leave">On Leave</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Check In</label>
+                      <input
+                        type="time"
+                        value={markAttendanceForm.check_in}
+                        onChange={(e) => setMarkAttendanceForm({ ...markAttendanceForm, check_in: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Check Out</label>
+                      <input
+                        type="time"
+                        value={markAttendanceForm.check_out}
+                        onChange={(e) => setMarkAttendanceForm({ ...markAttendanceForm, check_out: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Notes</label>
+                    <textarea
+                      value={markAttendanceForm.notes}
+                      onChange={(e) => setMarkAttendanceForm({ ...markAttendanceForm, notes: e.target.value })}
+                      rows="3"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                      placeholder="Add notes (e.g., Manually marked by HR)..."
+                    />
+                  </div>
+
+                  <div className="flex gap-4 mt-6">
+                    <button
+                      onClick={() => setShowMarkAttendanceModal(false)}
+                      className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-all duration-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={submitMarkAttendance}
+                      disabled={!markAttendanceForm.user_id}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <i className="fas fa-check mr-2"></i>
+                      Mark Attendance
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Employee Profile Modal */}
+      <AnimatePresence>
+        {showProfileModal && employeeProfile && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowProfileModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 sm:p-8">
+                {/* Header */}
+                <div className="flex justify-between items-start mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-lg">
+                      {(employeeProfile.full_name || employeeProfile.username || 'U').charAt(0)}
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">{employeeProfile.full_name || employeeProfile.username}</h2>
+                      <p className="text-gray-600">{employeeProfile.department || 'Department'} • {employeeProfile.position || 'Position'}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowProfileModal(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <i className="fas fa-times text-2xl"></i>
+                  </button>
+                </div>
+
+                {/* Stats Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <i className="fas fa-check-circle text-2xl text-green-500"></i>
+                      <span className="text-2xl font-bold text-green-900">{employeeProfile.stats.presentDays}</span>
+                    </div>
+                    <p className="text-sm font-medium text-green-700">Present Days</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <i className="fas fa-times-circle text-2xl text-red-500"></i>
+                      <span className="text-2xl font-bold text-red-900">{employeeProfile.stats.absentDays}</span>
+                    </div>
+                    <p className="text-sm font-medium text-red-700">Absent Days</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-4 border border-yellow-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <i className="fas fa-clock text-2xl text-yellow-500"></i>
+                      <span className="text-2xl font-bold text-yellow-900">{employeeProfile.stats.lateDays}</span>
+                    </div>
+                    <p className="text-sm font-medium text-yellow-700">Late Arrivals</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-4 border border-indigo-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <i className="fas fa-percentage text-2xl text-indigo-500"></i>
+                      <span className="text-2xl font-bold text-indigo-900">{employeeProfile.stats.attendanceRate}%</span>
+                    </div>
+                    <p className="text-sm font-medium text-indigo-700">Attendance Rate</p>
+                  </div>
+                </div>
+
+                {/* Additional Info */}
+                <div className="bg-gray-50 rounded-xl p-4 mb-6 grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Total Days (Last 30)</p>
+                    <p className="text-lg font-bold text-gray-900">{employeeProfile.stats.totalDays}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Avg. Working Hours</p>
+                    <p className="text-lg font-bold text-gray-900">{employeeProfile.stats.avgWorkingHours} hrs</p>
+                  </div>
+                </div>
+
+                {/* Attendance History */}
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                    <i className="fas fa-history text-indigo-600 mr-2"></i>
+                    Recent Attendance History (Last 30 Days)
+                  </h3>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Check In</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Check Out</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Hours</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {employeeProfile.attendanceHistory.slice(0, 10).map((record, index) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm text-gray-900">{formatDate(record.date)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{formatTime(record.check_in)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{formatTime(record.check_out)}</td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                              {record.working_hours ? `${record.working_hours} hrs` : 'N/A'}
+                            </td>
+                            <td className="px-4 py-3">{getStatusBadge(record.status)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={() => setShowProfileModal(false)}
+                    className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200 transition-all duration-300"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+        </>
       )}
     </div>
   );
 };
 
-export default AttendanceManagement;
+export default HRAttendanceDashboard;

@@ -20,7 +20,7 @@ export default function LoginForm({ onLogin, onShowRegister }) {
       formData.append("username", form.username);
       formData.append("password", form.password);
 
-      const res = await fetch("http://localhost:3005/api/auth/login", {
+      const res = await fetch("https://ratilalandsonscrm.onrender.com/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",

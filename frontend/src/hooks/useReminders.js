@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-const REMINDERS_API = 'http://localhost:3005/api/followups';
+const REMINDERS_API = 'https://ratilalandsonscrm.onrender.com/api/followups';
 
 export const useReminders = (userRole, userId) => {
   const [reminders, setReminders] = useState([]);
