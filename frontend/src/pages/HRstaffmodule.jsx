@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 // API Configuration
-const API_BASE_URL = 'https://ratilalandsonscrm.onrender.com';
+const API_BASE_URL = 'https://ratilalandsons.onrender.com';
 
 const HRStaffModule = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -255,9 +255,9 @@ const HRStaffModule = () => {
 
     try {
       const endpoints = [
-        'https://ratilalandsonscrm.onrender.com/api/auth/login',
-        'https://ratilalandsonscrm.onrender.com/auth/login',
-        'https://ratilalandsonscrm.onrender.com/login'
+        'https://ratilalandsons.onrender.com/api/auth/login',
+        'https://ratilalandsons.onrender.com/auth/login',
+        'https://ratilalandsons.onrender.com/login'
       ];
 
       let loginSuccess = false;

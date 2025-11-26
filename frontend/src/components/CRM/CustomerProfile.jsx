@@ -61,7 +61,7 @@ import CreatableSelect from 'react-select/creatable';
     try {
       const token = localStorage.getItem('access_token');
       // Fetch existing customers
-      const customersRes = await fetch('https://ratilalandsonscrm.onrender.com/api/customers/', {
+      const customersRes = await fetch('https://ratilalandsons.onrender.com/api/customers/', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -72,7 +72,7 @@ import CreatableSelect from 'react-select/creatable';
       }
 
       // Fetch all roles and filter for customer roles
-      const rolesRes = await fetch('https://ratilalandsonscrm.onrender.com/api/roles/', {
+      const rolesRes = await fetch('https://ratilalandsons.onrender.com/api/roles', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -86,7 +86,7 @@ import CreatableSelect from 'react-select/creatable';
       }
 
       // Fetch users with customer role from users API (no auth required)
-      const usersRes = await fetch('https://ratilalandsonscrm.onrender.com/api/users/', {
+      const usersRes = await fetch('https://ratilalandsons.onrender.com/api/users/', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -436,7 +436,7 @@ import CreatableSelect from 'react-select/creatable';
 
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch("https://ratilalandsonscrm.onrender.com/api/customers/", {
+      const res = await fetch("https://ratilalandsons.onrender.com/api/customers/", {
         method: "POST",
         body: formData, 
         headers: {
@@ -971,7 +971,7 @@ const OrderModal = ({ open, onClose, customer, onOrderSuccess }) => {
       setError("");
       
       const token = localStorage.getItem('access_token');
-      fetch('https://ratilalandsonscrm.onrender.com/api/stock/products', {
+      fetch('https://ratilalandsons.onrender.com/api/stock/products', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1044,7 +1044,7 @@ const OrderModal = ({ open, onClose, customer, onOrderSuccess }) => {
     setSuccessMessage("");
     try {
       const token = localStorage.getItem('access_token'); 
-      const res = await fetch(`https://ratilalandsonscrm.onrender.com/api/customers/${customerId}/orders`, {
+      const res = await fetch(`https://ratilalandsons.onrender.com/api/customers/${customerId}/orders`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -1230,7 +1230,7 @@ const CustomerDetailCard = ({ customer, onClose }) => {
     if (customer && customer.id) {
        const token = localStorage.getItem('access_token');
       setCommLoading(true);
-      fetch(`https://ratilalandsonscrm.onrender.com/api/customers/${customer.id}/communication`, {
+      fetch(`https://ratilalandsons.onrender.com/api/customers/${customer.id}/communication`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1242,7 +1242,7 @@ const CustomerDetailCard = ({ customer, onClose }) => {
 
       // Fetch feedbacks
       setFeedbackLoading(true);
-      fetch(`https://ratilalandsonscrm.onrender.com/api/customers/${customer.id}/feedback`, {
+      fetch(`https://ratilalandsons.onrender.com/api/customers/${customer.id}/feedback`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1277,7 +1277,7 @@ const CustomerDetailCard = ({ customer, onClose }) => {
 
     const token = localStorage.getItem('access_token');
     try {
-      const res = await fetch(`https://ratilalandsonscrm.onrender.com/api/customers/${customer.id}/communication`, {
+      const res = await fetch(`https://ratilalandsons.onrender.com/api/customers/${customer.id}/communication`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         'Authorization': `Bearer ${token}`,
@@ -1291,7 +1291,7 @@ const CustomerDetailCard = ({ customer, onClose }) => {
       if (!res.ok) throw new Error("Failed to add communication log");
       setCommForm({ channel: "Email", message: "", by: "User" });
       // Refresh logs with authentication header
-    const logsRes = await fetch(`https://ratilalandsonscrm.onrender.com/api/customers/${customer.id}/communication`, {
+    const logsRes = await fetch(`https://ratilalandsons.onrender.com/api/customers/${customer.id}/communication`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -1304,7 +1304,7 @@ const CustomerDetailCard = ({ customer, onClose }) => {
 };
 
   if (!customer) return null;
-  const API_BASE = "https://ratilalandsonscrm.onrender.com";
+  const API_BASE = "https://ratilalandsons.onrender.com";
   let imageUrl = "";
   if (typeof customer.profile_picture === "string" && customer.profile_picture) {
     if (customer.profile_picture.startsWith("http")) {
@@ -1484,7 +1484,7 @@ const CustomerProfile = () => {
   const rowsPerPage = 10;
 
   // API BASE
-  const API = "https://ratilalandsonscrm.onrender.com/api/customers/";
+  const API = "https://ratilalandsons.onrender.com/api/customers/";
 
   useEffect(() => {
     fetchCustomers();
@@ -1502,7 +1502,7 @@ const CustomerProfile = () => {
     });
       if (!res.ok) throw new Error("Failed to fetch customers");
       const data = await res.json();
-      const API_BASE = "https://ratilalandsonscrm.onrender.com";
+      const API_BASE = "https://ratilalandsons.onrender.com";
       const processedData = Array.isArray(data)
         ? data.map((customer) => {
             let avatar_url = customer.profile_picture || customer.avatar_url;
@@ -1535,7 +1535,7 @@ const CustomerProfile = () => {
     setLogsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch("https://ratilalandsonscrm.onrender.com/api/stock/logs", {
+      const res = await fetch("https://ratilalandsons.onrender.com/api/stock/logs", {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1587,7 +1587,7 @@ const CustomerProfile = () => {
       for (const [key, value] of formData.entries()) {
         console.log(`${key}:`, value);
       }
-      const res = await fetch("https://ratilalandsonscrm.onrender.com/api/customers/", {
+      const res = await fetch("https://ratilalandsons.onrender.com/api/customers/", {
         method: "POST",
         headers: {
           'Authorization': `Bearer ${token}`
@@ -1686,7 +1686,7 @@ const CustomerProfile = () => {
   useEffect(() => {
       if (selectedCustomer) {
         const token = localStorage.getItem('access_token');
-        fetch(`https://ratilalandsonscrm.onrender.com/api/customers/${selectedCustomer.id}/orders`, {
+        fetch(`https://ratilalandsons.onrender.com/api/customers/${selectedCustomer.id}/orders`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }

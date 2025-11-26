@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaBell } from "react-icons/fa";
 
-const INACTIVITY_ALERTS_API = "https://ratilalandsonscrm.onrender.com/api/alerts/inactivity";
-const ANOMALY_ALERTS_API = "https://ratilalandsonscrm.onrender.com/api/alerts/anomaly/detect";
-const ASSIGNED_TASKS_API = "https://ratilalandsonscrm.onrender.com/api/tasks/assigned";
+const INACTIVITY_ALERTS_API = "https://ratilalandsons.onrender.com/api/alerts/inactivity";
+const ANOMALY_ALERTS_API = "https://ratilalandsons.onrender.com/api/alerts/anomaly/detect";
+const ASSIGNED_TASKS_API = "https://ratilalandsons.onrender.com/api/tasks/assigned";
 
 const TopHeader = ({
   toggleSidebar,
@@ -182,7 +182,7 @@ const TopHeader = ({
     if (!roleId) return;
     const fetchRoleName = async () => {
       try {
-        const res = await fetch(`https://ratilalandsonscrm.onrender.com/api/roles/${roleId}`);
+        const res = await fetch(`https://ratilalandsons.onrender.com/api/roles/${roleId}`);
         if (!res.ok) throw new Error('Failed to fetch role');
         const data = await res.json();
         if (data && data.role_name) {
@@ -218,7 +218,7 @@ const TopHeader = ({
     setShowProfileCard(true);
     try {
       const token = localStorage.getItem("access_token");
-      const res = await fetch("https://ratilalandsonscrm.onrender.com/api/auth/me", {
+      const res = await fetch("https://ratilalandsons.onrender.com/api/auth/me", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -584,7 +584,7 @@ const TopHeader = ({
                 setEditProfileLoading(true);
                 try {
                   const token = localStorage.getItem('access_token');
-                  const res = await fetch('https://ratilalandsonscrm.onrender.com/api/auth/update', {
+                  const res = await fetch('https://ratilalandsons.onrender.com/api/auth/update', {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',

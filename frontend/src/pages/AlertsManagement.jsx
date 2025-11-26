@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { FaExclamationTriangle, FaBell, FaClock, FaBolt } from "react-icons/fa";
 
-const INACTIVITY_ALERTS_API = "https://ratilalandsonscrm.onrender.com/api/alerts/inactivity";
-const ANOMALY_ALERTS_API = "https://ratilalandsonscrm.onrender.com/api/alerts/anomaly/detect";
+const INACTIVITY_ALERTS_API = "https://ratilalandsons.onrender.com/api/alerts/inactivity";
+const ANOMALY_ALERTS_API = "https://ratilalandsons.onrender.com/api/alerts/anomaly/detect";
 
 function StatusBadge({ status }) {
   let color = "bg-gray-200 text-gray-600";

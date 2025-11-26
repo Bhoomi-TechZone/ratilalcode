@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { MessageCircle, Clock, User2, Info, Star } from "lucide-react";
 
-const API_BASE = "https://ratilalandsonscrm.onrender.com/api/tickets";
+const API_BASE = "https://ratilalandsons.onrender.com/api/tickets";
 
 function formatDate(dateStr) {
   if (!dateStr) return "";

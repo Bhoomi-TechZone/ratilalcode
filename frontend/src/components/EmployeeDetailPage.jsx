@@ -27,7 +27,7 @@ const EmployeeDetailPage = ({ employeeId, onBack }) => {
     if (activeTab === 'performance') fetchPerformanceReport();
   }, [employeeId, activeTab, selectedMonth, selectedYear]);
 
-  const API_BASE = 'https://ratilalandsonscrm.onrender.com/api/employees';
+  const API_BASE = 'https://ratilalandsons.onrender.com/api/employees';
 
   const fetchEmployeeProfile = async () => {
     try {

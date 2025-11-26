@@ -1,5 +1,5 @@
 // API Configuration
-        const API_URL = 'https://ratilalandsonscrm.onrender.com';
+        const API_URL = 'https://ratilalandsons.onrender.com';
 
         // DOM Elements
         const sections = document.querySelectorAll('.section');

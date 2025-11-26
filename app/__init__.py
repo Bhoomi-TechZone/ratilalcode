@@ -24,6 +24,7 @@ from app.routes.employees_new import employees_router as yelop
 from app.routes.hrstaffroute import hr_staff_router    
 from app.routes.access_check import access_router  
 
+
 from dotenv import load_dotenv
 load_dotenv()  
 
@@ -39,14 +40,14 @@ app = FastAPI(
 origins = [
     # 1. Primary Live Frontend URL
     "https://ratilalandsons.onrender.com",
-    "https://ratilalandsonscrm.onrender.com",
+    "https://ratilalandsons.onrender.com",
 
     # 2. Other FrontendLocal URLs for development and testing
     "http://localhost:4000",
     "http://127.0.0.1:4000",
     "http://localhost:3000",
     "http://localhost:8000",
-    "https://ratilalandsonscrm.onrender.com",
+    "https://ratilalandsons.onrender.com",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:8000",
     "http://127.0.0.1:8004",

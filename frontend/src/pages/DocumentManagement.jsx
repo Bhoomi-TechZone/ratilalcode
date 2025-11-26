@@ -9,7 +9,7 @@ const statusColor = {
 };
 
 const docTypes = ["Agreement", "Quotation", "MoU", "Receipt", "Other"];
-const API_BASE = "https://ratilalandsonscrm.onrender.com/api/documents";
+const API_BASE = "https://ratilalandsons.onrender.com/api/documents";
 const ROWS_PER_PAGE = 10;
 
 // Animation variants for modal
@@ -143,7 +143,7 @@ export default function DocumentManagement() {
           url: d.pdf_url
             ? d.pdf_url.startsWith("http")
               ? d.pdf_url
-              : `https://ratilalandsonscrm.onrender.com${d.pdf_url}`
+              : `https://ratilalandsons.onrender.com${d.pdf_url}`
             : "#",
         }))
       );

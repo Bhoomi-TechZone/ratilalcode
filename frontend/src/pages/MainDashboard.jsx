@@ -4,7 +4,7 @@ import ClientDashboard from "./Dashboard";
 import { DashboardContainer } from "../components/hr";
 import EmployeeDashboard from "./hr/EmployeeDashboard";
 
-const ROLES_API = "https://ratilalandsonscrm.onrender.com/api/roles?skip=0&limit=100";
+const ROLES_API = "https://ratilalandsons.onrender.com/api/roles?skip=0&limit=100";
 
 export default function MainDashboard() {
   const [roleLabels, setRoleLabels] = useState([]);

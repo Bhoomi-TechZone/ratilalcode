@@ -5,7 +5,7 @@ import AttendanceManagement from './AttendanceManagement';
 import LeaveManagement from './LeaveManagement';
 import EmployeeManagement from './EmployeeManagement';
 
-const API_BASE_URL = 'https://ratilalandsonscrm.onrender.com';
+const API_BASE_URL = 'https://ratilalandsons.onrender.com';
 
 const DashboardContainer = () => {
   // State Management

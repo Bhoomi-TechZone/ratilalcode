@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 
-const API_BASE_URL = "https://ratilalandsonscrm.onrender.com";
+const API_BASE_URL = "https://ratilalandsons.onrender.com";
 
 const AttendancePage = () => {
   // State

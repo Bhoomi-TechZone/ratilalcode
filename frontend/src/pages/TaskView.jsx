@@ -40,7 +40,7 @@ function TaskView() {
       try {
         const token = localStorage.getItem("access_token") || "";
         const fetches = userObj.roles.map(roleId =>
-          fetch(`https://ratilalandsonscrm.onrender.com/api/roles/${roleId}`, {
+          fetch(`https://ratilalandsons.onrender.com/api/roles/${roleId}`, {
             headers: { Authorization: `Bearer ${token}` }
           }).then(res => res.ok ? res.json() : null)
         );

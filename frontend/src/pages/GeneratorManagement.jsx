@@ -8,9 +8,9 @@ const NAV_SECTIONS = [
   { key: "maintenance", name: "Maintenance" },
 ];
 
-const API_BASE = "https://ratilalandsonscrm.onrender.com/api/generators-utilities";
-const USERS_API = "https://ratilalandsonscrm.onrender.com/api/auth/users";
-const SITES_API = "https://ratilalandsonscrm.onrender.com/api/sites";
+const API_BASE = "https://ratilalandsons.onrender.com/api/generators-utilities";
+const USERS_API = "https://ratilalandsons.onrender.com/api/auth/users";
+const SITES_API = "https://ratilalandsons.onrender.com/api/sites";
 const PAGE_SIZE = 10;
 
 // --- Mapping helpers ---

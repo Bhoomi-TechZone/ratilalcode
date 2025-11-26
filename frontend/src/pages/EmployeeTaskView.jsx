@@ -102,7 +102,7 @@ function EmployeeTaskView() {
   async function fetchSites() {
     try {
       const token = localStorage.getItem("access_token") || "";
-      const res = await fetch("https://ratilalandsonscrm.onrender.com/api/sites/", {
+      const res = await fetch("https://ratilalandsons.onrender.com/api/sites/", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`HTTP error status: ${res.status}`);
@@ -124,7 +124,7 @@ function EmployeeTaskView() {
     if (!roleId) return "--";
     try {
       const token = localStorage.getItem("access_token") || "";
-      const res = await fetch(`https://ratilalandsonscrm.onrender.com/api/roles/${roleId}`, {
+      const res = await fetch(`https://ratilalandsons.onrender.com/api/roles/${roleId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return "--";
@@ -140,7 +140,7 @@ function EmployeeTaskView() {
     if (!userId) return "--";
     try {
       const token = localStorage.getItem("access_token") || "";
-      const res = await fetch(`https://ratilalandsonscrm.onrender.com/api/users/${userId}`, {
+      const res = await fetch(`https://ratilalandsons.onrender.com/api/users/${userId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return "--";
@@ -159,7 +159,7 @@ function EmployeeTaskView() {
     setLoading(true);
     try {
       const token = localStorage.getItem("access_token") || "";
-      const res = await fetch("https://ratilalandsonscrm.onrender.com/api/tasks/mytasks", {
+      const res = await fetch("https://ratilalandsons.onrender.com/api/tasks/mytasks", {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,

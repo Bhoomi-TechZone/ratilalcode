@@ -3,7 +3,7 @@ import { Chart, registerables } from "chart.js";
 import { useNavigate } from "react-router-dom";
 Chart.register(...registerables);
 
-const API_BASE = "https://ratilalandsonscrm.onrender.com/api";
+const API_BASE = "https://ratilalandsons.onrender.com/api";
 
 const ATTENDANCE_DUMMY = {
   labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],

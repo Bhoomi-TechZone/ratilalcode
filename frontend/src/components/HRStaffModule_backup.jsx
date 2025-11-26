@@ -80,7 +80,7 @@ const HRStaffModule = () => {
     name: 'HR Manager'
   };
 
-  const API_BASE = 'https://ratilalandsonscrm.onrender.com/api/employees';
+  const API_BASE = 'https://ratilalandsons.onrender.com/api/employees';
 
   const fetchOverviewStats = async () => {
     try {

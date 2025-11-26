@@ -9,7 +9,7 @@ const OrderSummary = () => {
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
-    fetch(`https://ratilalandsonscrm.onrender.com/api/customers/${customerId}/orders`, {
+    fetch(`https://ratilalandsons.onrender.com/api/customers/${customerId}/orders`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }

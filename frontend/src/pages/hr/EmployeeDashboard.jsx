@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { FaUserClock, FaCalendarCheck, FaBusinessTime, FaFileAlt } from 'react-icons/fa';
 
-const API_BASE = "https://ratilalandsonscrm.onrender.com/api"; // update if needed
+const API_BASE = "https://ratilalandsons.onrender.com/api"; // update if needed
 
 // FIX: Add computeAttendanceRate function here so it is available in your component
 function computeAttendanceRate(records) {

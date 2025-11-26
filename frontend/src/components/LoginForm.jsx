@@ -25,7 +25,7 @@ export default function LoginForm({ onLogin, onShowRegister }) {
       formData.append("client_secret", "");
 
 
-      const res = await fetch("https://ratilalandsonscrm.onrender.com/api/auth/login", {
+      const res = await fetch("https://ratilalandsons.onrender.com/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",

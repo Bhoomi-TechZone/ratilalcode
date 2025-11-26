@@ -52,7 +52,7 @@ function Section({ title, children, icon }) {
 
 // --- DATA FETCHING COMPONENTS ---
 // Helper: API base (change to your backend base if needed)
-const API_BASE = "https://ratilalandsonscrm.onrender.com/api/payments";
+const API_BASE = "https://ratilalandsons.onrender.com/api/payments";
 
 // 1. Payment Milestones
 function PaymentMilestoneTable({ search }) {
