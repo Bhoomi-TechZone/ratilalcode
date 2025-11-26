@@ -19,8 +19,13 @@ export default function LoginForm({ onLogin, onShowRegister }) {
       const formData = new URLSearchParams();
       formData.append("username", form.username);
       formData.append("password", form.password);
+      formData.append("grant_type", "password");
+      formData.append("scope", "");
+      formData.append("client_id", "");
+      formData.append("client_secret", "");
 
-      const res = await fetch("https://ratilalandsonscrm.onrender.com/login", {
+
+      const res = await fetch("https://ratilalandsonscrm.onrender.com/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
