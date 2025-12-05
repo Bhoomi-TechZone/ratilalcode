@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Role API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .error { background: #ffe6e6; color: #d00; }
+        .success { background: #e6ffe6; color: #080; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Role API Test</h1>
+    <p>This test will verify if the role API endpoint is working correctly.</p>
+    
+    <button onclick="testRoleAPI('Ro-023')">Test Role Ro-023</button>
+    <button onclick="testRoleAPI('Ro-002')">Test Role Ro-002</button>
+    <button onclick="testEmployeesAPI()">Test Employees API</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_URL = 'https://ratilalandsons.onrender.com';
+        
+        async function testRoleAPI(roleId) {
+            const resultsDiv = document.getElementById('results');
+            const token = localStorage.getItem('access_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/roles/${roleId}`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                });
+                
+                const result = document.createElement('div');
+                result.className = 'result';
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    result.className += ' success';
+                    result.innerHTML = `
+                        <h3>✅ Role ${roleId} - Success</h3>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    result.className += ' error';
+                    result.innerHTML = `
+                        <h3>❌ Role ${roleId} - Error</h3>
+                        <p>Status: ${response.status}</p>
+                        <p>Response: ${await response.text()}</p>
+                    `;
+                }
+                
+                resultsDiv.appendChild(result);
+                
+            } catch (error) {
+                const result = document.createElement('div');
+                result.className = 'result error';
+                result.innerHTML = `
+                    <h3>❌ Role ${roleId} - Network Error</h3>
+                    <p>${error.message}</p>
+                `;
+                resultsDiv.appendChild(result);
+            }
+        }
+        
+        async function testEmployeesAPI() {
+            const resultsDiv = document.getElementById('results');
+            const token = localStorage.getItem('access_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/hr/employees`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                });
+                
+                const result = document.createElement('div');
+                result.className = 'result';
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    result.className += ' success';
+                    
+                    // Show structure of first employee
+                    const firstEmployee = Array.isArray(data) ? data[0] : data?.data?.[0] || data;
+                    
+                    result.innerHTML = `
+                        <h3>✅ Employees API - Success</h3>
+                        <p>Total employees: ${Array.isArray(data) ? data.length : (data?.data?.length || 'Unknown')}</p>
+                        <h4>First Employee Structure:</h4>
+                        <pre>${JSON.stringify(firstEmployee, null, 2)}</pre>
+                    `;
+                } else {
+                    result.className += ' error';
+                    result.innerHTML = `
+                        <h3>❌ Employees API - Error</h3>
+                        <p>Status: ${response.status}</p>
+                        <p>Response: ${await response.text()}</p>
+                    `;
+                }
+                
+                resultsDiv.appendChild(result);
+                
+            } catch (error) {
+                const result = document.createElement('div');
+                result.className = 'result error';
+                result.innerHTML = `
+                    <h3>❌ Employees API - Network Error</h3>
+                    <p>${error.message}</p>
+                `;
+                resultsDiv.appendChild(result);
+            }
+        }
+        
+        // Add token input for testing
+        if (!localStorage.getItem('access_token')) {
+            const tokenInput = document.createElement('div');
+            tokenInput.innerHTML = `
+                <p><strong>No access token found.</strong> Please paste your JWT token to test authenticated endpoints:</p>
+                <input type="text" id="tokenInput" placeholder="Paste your JWT token here..." style="width: 100%; padding: 8px; margin: 5px 0;">
+                <button onclick="setToken()">Set Token</button>
+            `;
+            document.body.insertBefore(tokenInput, document.getElementById('results'));
+        }
+        
+        function setToken() {
+            const token = document.getElementById('tokenInput').value;
+            if (token) {
+                localStorage.setItem('access_token', token);
+                location.reload();
+            } else {
+                alert('Please enter a valid token');
+            }
+        }
+    </script>
+</body>
+</html>
